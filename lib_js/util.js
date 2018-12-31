@@ -166,7 +166,8 @@ function format(...args) {
 }
 
 function formatWithOptions(inspectOptions, f) {
-    let i, tempStr;
+    let i;
+    let tempStr;
     if (typeof f !== 'string') {
         if (arguments.length === 1) return '';
         let res = '';
@@ -265,7 +266,7 @@ function debuglog(set) {
         if (debugEnvRegex.test(set)) {
             const pid = process.pid;
             debugs[set] = function debug() {
-                const msg = exports.format.apply(exports, arguments);
+                const msg = exports.format(...arguments);
                 console.error('%s %d: %s', set, pid, msg);
             };
         } else {
@@ -314,7 +315,7 @@ function inspect(value, opts) {
         ctx.showHidden = opts;
     } else if (opts) {
         const optKeys = Object.keys(opts);
-        for (var i = 0; i < optKeys.length; i++) {
+        for (let i = 0; i < optKeys.length; i++) {
             ctx[optKeys[i]] = opts[optKeys[i]];
         }
     }
@@ -790,7 +791,7 @@ function formatError(value) {
 function formatObject(ctx, value, recurseTimes, keys) {
     const len = keys.length;
     const output = new Array(len);
-    for (var i = 0; i < len; i++)
+    for (let i = 0; i < len; i++)
         output[i] = formatProperty(ctx, value, recurseTimes, keys[i], 0);
     return output;
 }
@@ -798,7 +799,7 @@ function formatObject(ctx, value, recurseTimes, keys) {
 function formatNamespaceObject(ctx, value, recurseTimes, keys) {
     const len = keys.length;
     const output = new Array(len);
-    for (var i = 0; i < len; i++) {
+    for (let i = 0; i < len; i++) {
         try {
             output[i] = formatProperty(ctx, value, recurseTimes, keys[i], 0);
         } catch (err) {
@@ -946,7 +947,7 @@ function formatSet(ctx, value, recurseTimes, keys) {
     // property isn't selected by Object.getOwnPropertyNames().
     if (ctx.showHidden)
         output[i++] = `[size]: ${ctx.stylize(`${value.size}`, 'number')}`;
-    for (var n = 0; n < keys.length; n++) {
+    for (let n = 0; n < keys.length; n++) {
         output[i++] = formatProperty(ctx, value, recurseTimes, keys[n], 0);
     }
     return output;
@@ -961,7 +962,7 @@ function formatMap(ctx, value, recurseTimes, keys) {
     // See comment in formatSet
     if (ctx.showHidden)
         output[i++] = `[size]: ${ctx.stylize(`${value.size}`, 'number')}`;
-    for (var n = 0; n < keys.length; n++) {
+    for (let n = 0; n < keys.length; n++) {
         output[i++] = formatProperty(ctx, value, recurseTimes, keys[n], 0);
     }
     return output;
@@ -1014,7 +1015,7 @@ function formatCollectionIterator(ctx, value, recurseTimes, keys) {
         }
         output.push(formatValue(ctx, entry, recurseTimes));
     }
-    for (var n = 0; n < keys.length; n++) {
+    for (let n = 0; n < keys.length; n++) {
         output.push(formatProperty(ctx, value, recurseTimes, keys[n], 0));
     }
     return output;
@@ -1039,14 +1040,15 @@ function formatPromise(ctx, value, recurseTimes, keys) {
             output = [state === kRejected ? `<rejected> ${str}` : str];
         }
     */
-    for (var n = 0; n < keys.length; n++) {
+    for (let n = 0; n < keys.length; n++) {
         output.push(formatProperty(ctx, value, recurseTimes, keys[n], 0));
     }
     return output;
 }
 
 function formatProperty(ctx, value, recurseTimes, key, array) {
-    let name, str;
+    let name;
+    let str;
     let extra = ' ';
     const desc = Object.getOwnPropertyDescriptor(value, key) ||
         { value: value[key], enumerable: true };
@@ -1180,8 +1182,8 @@ function timestamp() {
 }
 
 // log is just a thin wrapper to console.log that prepends a timestamp
-function log() {
-    console.log('%s - %s', timestamp(), exports.format.apply(exports, arguments));
+function log(...args) {
+    console.log('%s - %s', timestamp(), exports.format(...args));
 }
 
 /**
@@ -1230,13 +1232,13 @@ function _extend(target, source) {
 // Deprecated old stuff.
 
 function print(...args) {
-    for (var i = 0, len = args.length; i < len; ++i) {
+    for (let i = 0, len = args.length; i < len; ++i) {
         process.stdout.write(String(args[i]));
     }
 }
 
 function puts(...args) {
-    for (var i = 0, len = args.length; i < len; ++i) {
+    for (let i = 0, len = args.length; i < len; ++i) {
         process.stdout.write(`${args[i]}\n`);
     }
 }
@@ -1246,7 +1248,7 @@ function debug(x) {
 }
 
 function error(...args) {
-    for (var i = 0, len = args.length; i < len; ++i) {
+    for (let i = 0, len = args.length; i < len; ++i) {
         process.stderr.write(`${args[i]}\n`);
     }
 }

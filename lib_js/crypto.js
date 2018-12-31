@@ -25,10 +25,6 @@ class Hash {
     }
 }
 
-exports.createHash = function (type) {
-    return new Hash(type);
-}
+exports.createHash = type => new Hash(type)
 
-exports.createHmac = function (type, key) {
-    return new Hash(type, key);
-}
+exports.createHmac = (type, key) => new Hash(type, key)

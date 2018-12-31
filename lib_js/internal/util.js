@@ -147,8 +147,8 @@ function emitExperimentalWarning(feature) {
 
 function filterDuplicateStrings(items, low) {
     const map = new Map();
-    for (var i = 0; i < items.length; i++) {
-        const item = items[i];
+
+    for (const item of items) {
         const key = item.toLowerCase();
         if (low) {
             map.set(key, key);
@@ -156,6 +156,7 @@ function filterDuplicateStrings(items, low) {
             map.set(key, item);
         }
     }
+
     return Array.from(map.values()).sort();
 }
 
@@ -194,7 +195,7 @@ function getSignalsToNamesMapping() {
         return signalsToNamesMapping;
 
     signalsToNamesMapping = Object.create(null);
-    for (var key in signals) {
+    for (const key in signals) {
         signalsToNamesMapping[signals[key]] = key;
     }
 
@@ -263,7 +264,7 @@ function promisify(original) {
                         promiseReject(err);
                     } else if (argumentNames !== undefined && values.length > 1) {
                         const obj = {};
-                        for (var i = 0; i < argumentNames.length; i++)
+                        for (let i = 0; i < argumentNames.length; i++)
                             obj[argumentNames[i]] = values[i];
                         promiseResolve(obj);
                     } else {

@@ -30,6 +30,7 @@ class Readable extends EventEmitter {
         finished: false,
         errorEmitted: false
     };
+    //$
 
     constructor(options) {
         super();
@@ -285,11 +286,9 @@ class Readable extends EventEmitter {
         // important when wrapping filters and duplexes.
         for (var i in stream) {
             if (this[i] === undefined && typeof stream[i] === 'function') {
-                this[i] = function (method) {
-                    return function () {
-                        return stream[method].apply(stream, arguments);
-                    };
-                }(i);
+                this[i] = (method => function(...args) {
+                    return stream[method](...args);
+                })(i);
             }
         }
 
@@ -332,6 +331,7 @@ class Writable extends EventEmitter {
         finished: false,
         errorEmitted: false
     };
+    //$
 
     constructor(options) {
         super();
@@ -401,11 +401,12 @@ class Writable extends EventEmitter {
                 this._writableWriting = true;
                 if (this._writev) {
                     let newBuf = [];
-                    for (let i = 0; i < this._writableBuf.length; i++) {
-                        let entry = this._writableBuf[i];
+
+                    for (let entry of this._writableBuf) {
                         newBuf.push({ chunk: entry[0], encoding: entry[1] });
                         this.writableLength -= this._writableObjectMode ? 1 : entry[0].length;
                     }
+
                     let saveBuf = this._writableBuf;
                     this._writev(newBuf, (err) => { if (err) { this._writableState.errorEmitted = true; this.emit('error', err); } for (let i = 0; i < saveBuf.length; i++) for (let j = 2; j < saveBuf[i].length; j++) saveBuf[i][j](); this._writableNext(); });
                 }
@@ -539,7 +540,7 @@ class Duplex extends Readable {
 }
 
 Object.defineProperty(Writable, Symbol.hasInstance, {
-    value: function (object) {
+    value(object) {
         return Function[Symbol.hasInstance].call(this, object) || object instanceof Duplex;
     }
 });
@@ -686,7 +687,7 @@ function finished(stream, opts, callback) {
     if (opts.error !== false) stream.on('error', onerror);
     stream.on('close', onclose);
 
-    return function () {
+    return () => {
         stream.removeListener('complete', onfinish);
         stream.removeListener('abort', onclose);
         stream.removeListener('request', onrequest);
@@ -715,20 +716,21 @@ function pipeline(...streams) {
         if (destroyed)
             return;
         destroyed = true;
-        for (let i = 0; i < streams.length; i++) {
-            let stream = streams[i];
+
+        for (let stream of streams) {
             // request.destroy just do .end - .abort is what we want
             if (isRequest(stream)) return stream.abort();
             if (typeof stream.destroy === 'function') return stream.destroy();
         }
+
         callback(error);
     }
 
     let error;
-    const destroys = streams.map(function (stream, i) {
+    const destroys = streams.map((stream, i) => {
         const reading = i < streams.length - 1;
         const writing = i > 0;
-        return destroyer(stream, reading, writing, function (err) {
+        return destroyer(stream, reading, writing, err => {
             if (!error) error = err;
             if (err) destroys.forEach(call);
             if (reading) return;

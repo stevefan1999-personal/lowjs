@@ -29,7 +29,7 @@ class Resolver {
 
         const newSet = [];
         servers.forEach((serv) => {
-            var ipVersion = native.isIP(serv);
+            let ipVersion = native.isIP(serv);
             if (ipVersion !== 0)
                 return newSet.push([ipVersion, serv, IANA_DNS_PORT]);
 
@@ -76,7 +76,8 @@ class Resolver {
 function lookup(hostname, options, callback) {
     let family = 0;
     let hints = module.exports.ADDRCONFIG | module.exports.V4MAPPED;
-    let all = false, verbatim = false;
+    let all = false;
+    let verbatim = false;
 
     if (callback === undefined)
         callback = options;
@@ -98,7 +99,7 @@ function lookup(hostname, options, callback) {
         }
 
         if (!verbatim)
-            addresses.sort((a, b) => { return a.family - b.family; });
+            addresses.sort((a, b) => a.family - b.family);
         if (all)
             callback(null, addresses);
         else
@@ -114,7 +115,7 @@ function resolver(type) {
         if (this._handle === undefined)
             this._handle = native.newResolver(this);
 
-        var options;
+        let options;
         if (arguments.length > 2) {
             options = callback;
             callback = arguments[2];
@@ -127,7 +128,7 @@ function resolver(type) {
     return query;
 }
 
-var resolveMap = Object.create(null);
+const resolveMap = Object.create(null);
 Resolver.prototype.resolveAny = resolveMap.ANY = resolver('ANY');
 Resolver.prototype.resolve4 = resolveMap.A = resolver('A');
 Resolver.prototype.resolve6 = resolveMap.AAAA = resolver('AAAA');
@@ -141,7 +142,7 @@ Resolver.prototype.resolveNaptr = resolveMap.NAPTR = resolver('NAPTR');
 Resolver.prototype.resolveSoa = resolveMap.SOA = resolver('SOA');
 
 function resolve(hostname, rrtype, callback) {
-    var resolver;
+    let resolver;
     if (typeof rrtype === 'string') {
         resolver = resolveMap[rrtype];
     } else if (typeof rrtype === 'function') {

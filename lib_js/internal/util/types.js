@@ -7,72 +7,63 @@ const ReflectApply = Reflect.apply;
 // with the spread syntax, such that no additional special case is needed for
 // function calls w/o arguments.
 // Refs: https://github.com/v8/v8/blob/d6ead37d265d7215cf9c5f768f279e21bd170212/src/js/prologue.js#L152-L156
-function uncurryThis(func) {
-    return (thisArg, ...args) => ReflectApply(func, thisArg, args);
-}
+const uncurryThis = (func) => (thisArg, ...args) => ReflectApply(func, thisArg, args);
 
 // Cached to make sure no userland code can tamper with it.
 const isArrayBufferView = ArrayBuffer.isView;
 
-function isUint8Array(value) {
-    return value instanceof Uint8Array;
-}
+const isUint8Array = (value) => value instanceof Uint8Array;
 
-function isUint8ClampedArray(value) {
-    return value instanceof Uint8ClampedArray;
-}
+const isUint8ClampedArray = (value) => value instanceof Uint8ClampedArray;
 
-function isUint16Array(value) {
-    return value instanceof Uint16Array;
-}
+const isUint16Array = (value) => value instanceof Uint16Array;
 
-function isUint32Array(value) {
-    return value instanceof Uint32Array;
-}
+const isUint32Array = (value) => value instanceof Uint32Array;
 
-function isInt8Array(value) {
-    return value instanceof Int8Array;
-}
+const isInt8Array = (value) => value instanceof Int8Array;
 
-function isInt16Array(value) {
-    return value instanceof Int16Array;
-}
+const isInt16Array = (value) => value instanceof Int16Array;
 
-function isInt32Array(value) {
-    return value instanceof Int32Array;
-}
+const isInt32Array = (value) => value instanceof Int32Array;
 
-function isFloat32Array(value) {
-    return value instanceof Float32Array;
-}
+const isFloat32Array = (value) => value instanceof Float32Array;
 
-function isFloat64Array(value) {
-    return value instanceof Float64Array;
-}
+const isFloat64Array = (value) => value instanceof Float64Array;
 
-function isBigInt64Array(value) {
-    return value instanceof BigInt64Array;
-}
+const isBigInt64Array = (value) => value instanceof BigInt64Array;
 
-function isBigUint64Array(value) {
-    return value instanceof BigUint64Array;
-}
+const isBigUint64Array = (value) => value instanceof BigUint64Array;
 
-function isAnyArrayBuffer(value) { return false; }
-function isArgumentsObject(value) { return false; }
-function isDataView(value) { return value instanceof DataView; }
-function isExternal(value) { return false; }
-function isMap(value) { return value instanceof Map; }
-function isMapIterator(value) { return false; }
-function isPromise(value) { return value instanceof Promise; }
-function isSet(value) { return value instanceof Set; }
-function isSetIterator(value) { return false; }
-function isWeakMap(value) { return value instanceof WeakMap; }
-function isWeakSet(value) { return value instanceof WeakSet; }
-function isRegExp(value) { return value instanceof RegExp; }
-function isDate(value) { return value instanceof Date; }
-function isTypedArray(value) { return false; }
-function isModuleNamespaceObject(value) { return false; }
+const isAnyArrayBuffer = (value) => false;
+
+const isArgumentsObject = (value) => false;
+
+const isDataView = (value) => value instanceof DataView;
+
+const isExternal = (value) => false;
+
+const isMap = (value) => value instanceof Map;
+
+const isMapIterator = (value) => false;
+
+const isPromise = (value) => value instanceof Promise;
+
+const isSet = (value) => value instanceof Set;
+
+const isSetIterator = (value) => false;
+
+const isWeakMap = (value) => value instanceof WeakMap;
+
+const isWeakSet = (value) => value instanceof WeakSet;
+
+const isRegExp = (value) => value instanceof RegExp;
+
+const isDate = (value) => value instanceof Date;
+
+const isTypedArray = (value) => false;
+
+const isModuleNamespaceObject = (value) => false;
+
 // TODO: check list of util/types
 
 module.exports = {
@@ -102,6 +93,6 @@ module.exports = {
     isWeakSet,
     isRegExp,
     isDate,
-    isTypedArray,
     isModuleNamespaceObject
-};
+}
+;

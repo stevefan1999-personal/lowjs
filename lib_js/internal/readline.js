@@ -16,7 +16,7 @@ let isFullWidthCodePoint;
 
 function CSI(strings, ...args) {
     let ret = `${kEscape}[`;
-    for (var n = 0; n < strings.length; n++) {
+    for (let n = 0; n < strings.length; n++) {
         ret += strings[n];
         if (n < args.length)
             ret += args[n];
@@ -58,7 +58,7 @@ if (process.binding('config').hasIntl) {
 
         str = stripVTControlCharacters(String(str));
 
-        for (var i = 0; i < str.length; i++) {
+        for (let i = 0; i < str.length; i++) {
             const code = str.codePointAt(i);
 
             if (code >= 0x10000) { // surrogates

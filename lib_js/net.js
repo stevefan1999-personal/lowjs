@@ -10,6 +10,7 @@ class Socket extends stream.Duplex {
     bytesRead = 0;
     bytesWritten = 0;
     bufferSize = 0;
+    //$
 
     constructor(options) {
         if (options && options.secureContext)
@@ -277,11 +278,11 @@ class Socket extends stream.Duplex {
 }
 
 class Server extends events.EventEmitter {
-    _address = null;
+    /*_address = null;
     listening = false;
     destroyed = false;
 
-    connections = 0;
+    connections = 0;*///$
 
     constructor(options, connectionListener) {
         super();
@@ -515,6 +516,6 @@ module.exports = {
     createConnection,
     createServer,
     isIP: native.isIP,
-    isIPv4: (input) => { return native.isIP(input) == 4; },
-    isIPv6: (input) => { return native.isIP(input) == 6; }
+    isIPv4: input => native.isIP(input) == 4,
+    isIPv6: input => native.isIP(input) == 6
 }

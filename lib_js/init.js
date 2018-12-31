@@ -42,59 +42,60 @@ function getStackObjs(constructor) {
         txt = txt.substr(pos + 1);
 
     while (true) {
-        let pos = txt.indexOf('    at ');
-        if (pos < 0)
-            break;
-        pos += '    at '.length;
-        let posEnd = txt.indexOf('\n', pos);
+      let pos = txt.indexOf('    at ');
+      if (pos < 0)
+          break;
+      pos += '    at '.length;
+      let posEnd = txt.indexOf('\n', pos);
 
-        let file, func;
-        let line = posEnd >= 0 ? txt.substring(pos, posEnd) : txt.substr(pos);
+      let file;
+      let func;
+      let line = posEnd >= 0 ? txt.substring(pos, posEnd) : txt.substr(pos);
 
-        // Handle line
-        let pos2 = line.indexOf(' (');
-        if (pos2 >= 0) {
-            func = line.substr(0, pos2);
-            pos2 += 2;
+      // Handle line
+      let pos2 = line.indexOf(' (');
+      if (pos2 >= 0) {
+          func = line.substr(0, pos2);
+          pos2 += 2;
 
-            let pos3 = line.indexOf(')', pos2);
-            if (pos3 >= 0 && pos2 != pos3) {
-                let pos4 = line.lastIndexOf(':', pos3);
-                if (pos4 != -1 && pos4 < pos3) {
-                    file = line.substring(pos2, pos4);
-                    line = line.substring(pos4 + 1, pos3);
-                } else {
-                    file = line.substring(pos2, pos3);
-                    line = undefined;
-                }
-            } else {
-                file = undefined;
-                line = undefined;
-            }
+          let pos3 = line.indexOf(')', pos2);
+          if (pos3 >= 0 && pos2 != pos3) {
+              let pos4 = line.lastIndexOf(':', pos3);
+              if (pos4 != -1 && pos4 < pos3) {
+                  file = line.substring(pos2, pos4);
+                  line = line.substring(pos4 + 1, pos3);
+              } else {
+                  file = line.substring(pos2, pos3);
+                  line = undefined;
+              }
+          } else {
+              file = undefined;
+              line = undefined;
+          }
 
-            if (startAt && startAt == func) {
-                stack = [];
-                startAt = null;
-            } else
-                stack.push(new StackObj(file, func, line));
-        }
+          if (startAt && startAt == func) {
+              stack = [];
+              startAt = null;
+          } else
+              stack.push(new StackObj(file, func, line));
+      }
 
-        if (posEnd < 0)
-            break;
-        txt = txt.substr(posEnd + 1);
+      if (posEnd < 0)
+          break;
+      txt = txt.substr(posEnd + 1);
     }
 
     return stack;
 }
 
-Error.prepareStackTrace = function (obj, objs) {
+Error.prepareStackTrace = (obj, objs) => {
     let txt = 'Error';
     for (let i = 0; i < objs.length; i++)
         txt += '\n    at ' + objs[i].getFunctionName() + ' (' + objs[i].getFileName() + (objs[i].getLineNumber() === undefined ? '' : ':' + objs[i].getLineNumber()) + ')';
 
     return txt;
 }
-Error.captureStackTrace = function (obj, constructor) {
+Error.captureStackTrace = (obj, constructor) => {
     obj.stack = Error.prepareStackTrace(obj, getStackObjs(constructor));
 }
 
@@ -115,7 +116,7 @@ class Timeout {
         native.clearChore(this._id);
         this._id = native.setChore(this._func, this._delay, this._oneshot);
     }
-v}
+}
 exports.setTimeout = function (func, delay) {
     var cb_func;
     var bind_args;
@@ -135,7 +136,7 @@ exports.setTimeout = function (func, delay) {
         // Special case: callback arguments are provided.
         bind_args = Array.prototype.slice.call(arguments, 2);  // [ arg1, arg2, ... ]
         bind_args.unshift(this);  // [ global(this), arg1, arg2, ... ]
-        cb_func = func.bind.apply(func, bind_args);
+        cb_func = func.bind(...bind_args);
     } else {
         // Normal case: callback given as a function without arguments.
         cb_func = func;
@@ -162,7 +163,7 @@ exports.setInterval = function (func, delay) {
         // Special case: callback arguments are provided.
         bind_args = Array.prototype.slice.call(arguments, 2);  // [ arg1, arg2, ... ]
         bind_args.unshift(this);  // [ global(this), arg1, arg2, ... ]
-        cb_func = func.bind.apply(func, bind_args);
+        cb_func = func.bind(...bind_args);
     } else {
         // Normal case: callback given as a function without arguments.
         cb_func = func;
@@ -190,7 +191,7 @@ exports.setImmediate = function (func) {
         // Special case: callback arguments are provided.
         bind_args = Array.prototype.slice.call(arguments, 1);  // [ arg1, arg2, ... ]
         bind_args.unshift(this);  // [ global(this), arg1, arg2, ... ]
-        cb_func = func.bind.apply(func, bind_args);
+        cb_func = func.bind(...bind_args);
     } else {
         // Normal case: callback given as a function without arguments.
         cb_func = func;
@@ -224,7 +225,7 @@ exports.clearImmediate = clear;
                 return reduce(ownKeys(O), (e, k) => concat(e, typeof k === 'string' && isEnumerable(O, k) ? [[k, O[k]]] : []), []) } }
 
 // https://raw.githubusercontent.com/lahmatiy/es6-promise-polyfill/master/promise.min.js
-(function(global){
+(global => {
 
 //
 // Check for native Promise and it has correct interface
@@ -238,12 +239,11 @@ var nativePromiseSupported =
   'resolve' in NativePromise &&
   'reject' in NativePromise &&
   'all' in NativePromise &&
-  'race' in NativePromise &&
-  // Older version of the spec had a resolver object
+  'race' in NativePromise && // Older version of the spec had a resolver object
   // as the arg rather than a function
-  (function(){
+  (() => {
     var resolve;
-    new NativePromise(function(r){ resolve = r; });
+    new NativePromise(r => { resolve = r; });
     return typeof resolve === 'function';
   })();
 
@@ -263,9 +263,7 @@ else
   // AMD
   if (typeof define == 'function' && define.amd)
   {
-    define(function(){
-      return nativePromiseSupported ? NativePromise : Promise;
-    });
+    define(() => nativePromiseSupported ? NativePromise : Promise);
   }
   else
   {
@@ -284,7 +282,7 @@ var PENDING = 'pending';
 var SEALED = 'sealed';
 var FULFILLED = 'fulfilled';
 var REJECTED = 'rejected';
-var NOOP = function(){};
+var NOOP = () => {};
 
 function isArray(value) {
   return Object.prototype.toString.call(value) === '[object Array]';
@@ -372,7 +370,7 @@ function handleThenable(promise, value) {
 
       if (typeof then === 'function')
       {
-        then.call(value, function(val){
+        then.call(value, val => {
           if (!resolved)
           {
             resolved = true;
@@ -382,7 +380,7 @@ function handleThenable(promise, value) {
             else
               fulfill(promise, val);
           }
-        }, function(reason){
+        }, reason => {
           if (!resolved)
           {
             resolved = true;
@@ -472,7 +470,7 @@ Promise.prototype = {
   then_: null,
   data_: undefined,
 
-  then: function(onFulfillment, onRejection){
+  then(onFulfillment, onRejection) {
     var subscriber = {
       owner: this,
       then: new this.constructor(NOOP),
@@ -505,13 +503,13 @@ Promise.all = function(promises){
   if (!isArray(promises))
     throw new TypeError('You must pass an array to Promise.all().');
 
-  return new Class(function(resolve, reject){
+  return new Class((resolve, reject) => {
     var results = [];
     var remaining = 0;
 
     function resolver(index){
       remaining++;
-      return function(value){
+      return value => {
         results[index] = value;
         if (!--remaining)
           resolve(results);
@@ -539,7 +537,7 @@ Promise.race = function(promises){
   if (!isArray(promises))
     throw new TypeError('You must pass an array to Promise.race().');
 
-  return new Class(function(resolve, reject) {
+  return new Class((resolve, reject) => {
     for (var i = 0, promise; i < promises.length; i++)
     {
       promise = promises[i];
@@ -558,7 +556,7 @@ Promise.resolve = function(value){
   if (value && typeof value === 'object' && value.constructor === Class)
     return value;
 
-  return new Class(function(resolve){
+  return new Class(resolve => {
     resolve(value);
   });
 };
@@ -566,7 +564,7 @@ Promise.resolve = function(value){
 Promise.reject = function(reason){
   var Class = this;
 
-  return new Class(function(resolve, reject){
+  return new Class((resolve, reject) => {
     reject(reason);
   });
 };
@@ -575,11 +573,15 @@ Promise.reject = function(reason){
 
 // https://github.com/WebReflection/es6-collections/blob/master/index.js
 // + function gets exports directly (look at end)
-(function (exports) {'use strict';
+(exports => {
+  'use strict';
   //shared pointer
   var i;
+
   //shortcuts
-  var defineProperty = Object.defineProperty, is = function(a,b) { return (a === b) || (a !== a && b !== b) };
+  var defineProperty = Object.defineProperty;
+
+  var is = (a, b) => (a === b) || (a !== a && b !== b);
 
 
   //Polyfill global objects
@@ -712,11 +714,11 @@ Promise.reject = function(reason){
       this._keys.splice(i, 1);
       this._values.splice(i, 1);
       // update iteration pointers
-      this._itp.forEach(function(p) { if (i < p[0]) p[0]--; });
+      this._itp.forEach(p => { if (i < p[0]) p[0]--; });
     }
     // Aurora here does it while Canary doesn't
     return -1 < i;
-  };
+  }
 
   function sharedGet(key) {
     return this.has(key) ? this._values[i] : undefined;
@@ -778,11 +780,13 @@ Promise.reject = function(reason){
   }
 
   function sharedIterator(itp, array, array2) {
-    var p = [0], done = false;
+    var p = [0];
+    var done = false;
     itp.push(p);
     return {
-      next: function() {
-        var v, k = p[0];
+      next() {
+        var v;
+        var k = p[0];
         if (!done && k < array.length) {
           v = array2 ? [array[k], array2[k]]: array[k];
           p[0]++;
@@ -790,7 +794,7 @@ Promise.reject = function(reason){
           done = true;
           itp.splice(itp.indexOf(p), 1);
         }
-        return { done: done, value: v };
+        return { done, value: v };
       }
     };
   }
@@ -807,7 +811,6 @@ Promise.reject = function(reason){
       callback.call(context, r.value[1], r.value[0], this);
     }
   }
-
 })(exports);
 
 Set.prototype[Symbol.iterator] = Set.prototype.values;
@@ -834,26 +837,29 @@ Array.prototype[Symbol.iterator] = Array.prototype.values = function values() {
 };
 
 Array.from = function from(o) {
-    var m = o[Symbol.iterator];
-    if (!m) return [];
-    var i = m.call(o), r, ar = [], e;
-    try {
-        while (!(r = i.next()).done) ar.push(r.value);
-    }
-    catch (error) { e = { error: error }; }
-    finally {
-        try {
-            if (r && !r.done && (m = i["return"])) m.call(i);
-        }
-        finally { if (e) throw e.error; }
-    }
-    return ar;
+  var m = o[Symbol.iterator];
+  if (!m) return [];
+  var i = m.call(o);
+  var r;
+  var ar = [];
+  var e;
+  try {
+      while (!(r = i.next()).done) ar.push(r.value);
+  }
+  catch (error) { e = { error }; }
+  finally {
+      try {
+          if (r && !r.done && (m = i["return"])) m.call(i);
+      }
+      finally { if (e) throw e.error; }
+  }
+  return ar;
 }
 
 // https://tc39.github.io/ecma262/#sec-array.prototype.find
 if (!Array.prototype.find) {
   Object.defineProperty(Array.prototype, 'find', {
-    value: function(predicate) {
+    value(predicate) {
      // 1. Let O be ? ToObject(this value).
       if (this == null) {
         throw new TypeError('"this" is null or not defined');
@@ -955,9 +961,7 @@ Object.defineProperty(
   );
 
 exports.process = new events.EventEmitter();
-native.processInfo(process, (signal) => {
-    return process.emit(signal);
-});
+native.processInfo(process, signal => process.emit(signal));
 
 process.nextTick = setImmediate;
 process.hrtime = function hrtime(time) {
@@ -1047,42 +1051,41 @@ process.stdin.on('resume', () => {
 
 exports.console = require('console');
 
-Buffer.from = (...args) => { return new Buffer(...args); }
-Buffer.allocUnsafe = Buffer.alloc = (...args) => { return new Buffer(...args); }
+Buffer.from = (...args) => new Buffer(...args)
+Buffer.allocUnsafe = Buffer.alloc = (...args) => new Buffer(...args)
 
 // Overwrite toString because DukTape does not implement hex and base64
-Buffer.prototype.toString = ((oldFunc) => {
-    return function (encoding) {
-        if (encoding == 'hex') {
-            let txt = '';
-            for (let i = 0; i < this.length; i++) {
-                let c = this[i];
-                txt += c < 16 ? '0' + c.toString(16) : c.toString(16);
-            }
-            return txt;
-        } else if (encoding == 'base64') {
-            let txt = '';
-            for (let i = 0; i < this.length; i += 3) {
-                const _keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
+Buffer.prototype.toString = ((oldFunc => function (encoding) {
+    if (encoding == 'hex') {
+      let txt = '';
 
-                let enc1 = this[i] >> 2;
-                let enc2 = ((this[i] & 3) << 4) | (this[i + 1] >> 4);
-                let enc3 = ((this[i + 1] & 15) << 2) | (this[i + 2] >> 6);
-                let enc4 = this[i + 2] & 63;
+      for (let c of this) {
+        txt += c < 16 ? '0' + c.toString(16) : c.toString(16);
+      }
 
-                if (i + 1 == this.length)
-                    enc3 = enc4 = 64;
-                else if (i + 2 == this.length)
-                    enc4 = 64;
+      return txt;
+    } else if (encoding == 'base64') {
+        let txt = '';
+        for (let i = 0; i < this.length; i += 3) {
+            const _keyStr = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
-                txt += _keyStr.charAt(enc1) + _keyStr.charAt(enc2) +
-                    _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
-            }
-            return txt;
-        } else
-            return oldFunc.call(this, encoding);
-    }
-})(Buffer.prototype.toString);
+            let enc1 = this[i] >> 2;
+            let enc2 = ((this[i] & 3) << 4) | (this[i + 1] >> 4);
+            let enc3 = ((this[i + 1] & 15) << 2) | (this[i + 2] >> 6);
+            let enc4 = this[i + 2] & 63;
+
+            if (i + 1 == this.length)
+                enc3 = enc4 = 64;
+            else if (i + 2 == this.length)
+                enc4 = 64;
+
+            txt += _keyStr.charAt(enc1) + _keyStr.charAt(enc2) +
+                _keyStr.charAt(enc3) + _keyStr.charAt(enc4);
+        }
+        return txt;
+    } else
+        return oldFunc.call(this, encoding);
+}))(Buffer.prototype.toString);
 
 /**
  * Copyright (c) 2014-present, Facebook, Inc.
@@ -1091,7 +1094,7 @@ Buffer.prototype.toString = ((oldFunc) => {
  * LICENSE file in the root directory of this source tree.
  */
 
-exports.regeneratorRuntime = (function (exports) {
+exports.regeneratorRuntime = (exports => {
   "use strict";
 
   var Op = Object.prototype;
@@ -1178,14 +1181,14 @@ exports.regeneratorRuntime = (function (exports) {
   // Helper for defining the .next, .throw, and .return methods of the
   // Iterator interface in terms of a single ._invoke method.
   function defineIteratorMethods(prototype) {
-    ["next", "throw", "return"].forEach(function(method) {
+    ["next", "throw", "return"].forEach(method => {
       prototype[method] = function(arg) {
         return this._invoke(method, arg);
       };
     });
   }
 
-  exports.isGeneratorFunction = function(genFun) {
+  exports.isGeneratorFunction = genFun => {
     var ctor = typeof genFun === "function" && genFun.constructor;
     return ctor
       ? ctor === GeneratorFunction ||
@@ -1195,7 +1198,7 @@ exports.regeneratorRuntime = (function (exports) {
       : false;
   };
 
-  exports.mark = function(genFun) {
+  exports.mark = genFun => {
     if (Object.setPrototypeOf) {
       Object.setPrototypeOf(genFun, GeneratorFunctionPrototype);
     } else {
@@ -1212,9 +1215,9 @@ exports.regeneratorRuntime = (function (exports) {
   // `yield regeneratorRuntime.awrap(x)`, so that the runtime can test
   // `hasOwn.call(value, "__await")` to determine if the yielded value is
   // meant to be awaited.
-  exports.awrap = function(arg) {
-    return { __await: arg };
-  };
+  exports.awrap = arg => ({
+    __await: arg
+  });
 
   function AsyncIterator(generator) {
     function invoke(method, arg, resolve, reject) {
@@ -1227,24 +1230,22 @@ exports.regeneratorRuntime = (function (exports) {
         if (value &&
             typeof value === "object" &&
             hasOwn.call(value, "__await")) {
-          return Promise.resolve(value.__await).then(function(value) {
+          return Promise.resolve(value.__await).then(value => {
             invoke("next", value, resolve, reject);
-          }, function(err) {
+          }, err => {
             invoke("throw", err, resolve, reject);
           });
         }
 
-        return Promise.resolve(value).then(function(unwrapped) {
+        return Promise.resolve(value).then(unwrapped => {
           // When a yielded Promise is resolved, its final value becomes
           // the .value of the Promise<{value,done}> result for the
           // current iteration.
           result.value = unwrapped;
           resolve(result);
-        }, function(error) {
-          // If a rejected Promise was yielded, throw the rejection back
-          // into the async generator function so it can be handled there.
-          return invoke("throw", error, resolve, reject);
-        });
+        }, error => // If a rejected Promise was yielded, throw the rejection back
+        // into the async generator function so it can be handled there.
+        invoke("throw", error, resolve, reject));
       }
     }
 
@@ -1252,7 +1253,7 @@ exports.regeneratorRuntime = (function (exports) {
 
     function enqueue(method, arg) {
       function callInvokeWithMethodAndArg() {
-        return new Promise(function(resolve, reject) {
+        return new Promise((resolve, reject) => {
           invoke(method, arg, resolve, reject);
         });
       }
@@ -1292,16 +1293,14 @@ exports.regeneratorRuntime = (function (exports) {
   // Note that simple async functions are implemented on top of
   // AsyncIterator objects; they just return a Promise for the value of
   // the final result produced by the iterator.
-  exports.async = function(innerFn, outerFn, self, tryLocsList) {
+  exports.async = (innerFn, outerFn, self, tryLocsList) => {
     var iter = new AsyncIterator(
       wrap(innerFn, outerFn, self, tryLocsList)
     );
 
     return exports.isGeneratorFunction(outerFn)
       ? iter // If outerFn is a generator, return the full iterator.
-      : iter.next().then(function(result) {
-          return result.done ? result.value : iter.next();
-        });
+      : iter.next().then(result => result.done ? result.value : iter.next());
   };
 
   function makeInvokeMethod(innerFn, self, context) {
@@ -1480,9 +1479,7 @@ exports.regeneratorRuntime = (function (exports) {
     return this;
   };
 
-  Gp.toString = function() {
-    return "[object Generator]";
-  };
+  Gp.toString = () => "[object Generator]";
 
   function pushTryEntry(locs) {
     var entry = { tryLoc: locs[0] };
@@ -1515,7 +1512,7 @@ exports.regeneratorRuntime = (function (exports) {
     this.reset(true);
   }
 
-  exports.keys = function(object) {
+  exports.keys = object => {
     var keys = [];
     for (var key in object) {
       keys.push(key);
@@ -1554,7 +1551,9 @@ exports.regeneratorRuntime = (function (exports) {
       }
 
       if (!isNaN(iterable.length)) {
-        var i = -1, next = function next() {
+        var i = -1;
+
+        var next = function next() {
           while (++i < iterable.length) {
             if (hasOwn.call(iterable, i)) {
               next.value = iterable[i];
@@ -1585,7 +1584,7 @@ exports.regeneratorRuntime = (function (exports) {
   Context.prototype = {
     constructor: Context,
 
-    reset: function(skipTempReset) {
+    reset(skipTempReset) {
       this.prev = 0;
       this.next = 0;
       // Resetting context._sent for legacy support of Babel's
@@ -1611,7 +1610,7 @@ exports.regeneratorRuntime = (function (exports) {
       }
     },
 
-    stop: function() {
+    stop() {
       this.done = true;
 
       var rootEntry = this.tryEntries[0];
@@ -1623,7 +1622,7 @@ exports.regeneratorRuntime = (function (exports) {
       return this.rval;
     },
 
-    dispatchException: function(exception) {
+    dispatchException(exception) {
       if (this.done) {
         throw exception;
       }
@@ -1683,7 +1682,7 @@ exports.regeneratorRuntime = (function (exports) {
       }
     },
 
-    abrupt: function(type, arg) {
+    abrupt(type, arg) {
       for (var i = this.tryEntries.length - 1; i >= 0; --i) {
         var entry = this.tryEntries[i];
         if (entry.tryLoc <= this.prev &&
@@ -1717,7 +1716,7 @@ exports.regeneratorRuntime = (function (exports) {
       return this.complete(record);
     },
 
-    complete: function(record, afterLoc) {
+    complete(record, afterLoc) {
       if (record.type === "throw") {
         throw record.arg;
       }
@@ -1736,7 +1735,7 @@ exports.regeneratorRuntime = (function (exports) {
       return ContinueSentinel;
     },
 
-    finish: function(finallyLoc) {
+    finish(finallyLoc) {
       for (var i = this.tryEntries.length - 1; i >= 0; --i) {
         var entry = this.tryEntries[i];
         if (entry.finallyLoc === finallyLoc) {
@@ -1765,11 +1764,11 @@ exports.regeneratorRuntime = (function (exports) {
       throw new Error("illegal catch attempt");
     },
 
-    delegateYield: function(iterable, resultName, nextLoc) {
+    delegateYield(iterable, resultName, nextLoc) {
       this.delegate = {
         iterator: values(iterable),
-        resultName: resultName,
-        nextLoc: nextLoc
+        resultName,
+        nextLoc
       };
 
       if (this.method === "next") {
@@ -1788,11 +1787,9 @@ exports.regeneratorRuntime = (function (exports) {
   // injected easily by `bin/regenerator --include-runtime script.js`.
   return exports;
 
-}(
-  // If this script is executing as a CommonJS module, use module.exports
-  // as the regeneratorRuntime namespace. Otherwise create a new empty
-  // object. Either way, the resulting object will be used to initialize
-  // the regeneratorRuntime variable at the top of this file.
-  typeof module === "object" ? module.exports : {}
-));
+})(// If this script is executing as a CommonJS module, use module.exports
+// as the regeneratorRuntime namespace. Otherwise create a new empty
+// object. Either way, the resulting object will be used to initialize
+// the regeneratorRuntime variable at the top of this file.
+typeof module === "object" ? module.exports : {});
 loadedBla = true;

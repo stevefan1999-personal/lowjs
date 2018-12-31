@@ -48,6 +48,7 @@ const TERM_ENVS_REG_EXP = [
 class ReadStream extends net.Socket {
     isTTY = true;
     isRaw = false;
+    //$
 
     constructor(fd) {
         super({
@@ -65,6 +66,7 @@ class ReadStream extends net.Socket {
 
 class WriteStream extends net.Socket {
     isTTY = true;
+    //$
 
     constructor(fd) {
         super({

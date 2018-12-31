@@ -1,7 +1,7 @@
 'use strict';
 
 const hexTable = new Array(256);
-for (var i = 0; i < 256; ++i)
+for (let i = 0; i < 256; ++i)
   hexTable[i] = '%' + ((i < 16 ? '0' : '') + i.toString(16)).toUpperCase();
 
 const isHexTable = [

@@ -49,11 +49,11 @@ function inspectValue(val) {
 }
 
 function createErrDiff(actual, expected, operator) {
-    var other = '';
-    var res = '';
-    var lastPos = 0;
-    var end = '';
-    var skipped = false;
+    let other = '';
+    let res = '';
+    let lastPos = 0;
+    let end = '';
+    let skipped = false;
     const actualLines = inspectValue(actual);
     const expectedLines = inspectValue(expected);
     const msg = READABLE_OPERATOR[operator] +
@@ -62,9 +62,9 @@ function createErrDiff(actual, expected, operator) {
 
     // Remove all ending lines that match (this optimizes the output for
     // readability by reducing the number of total changed lines).
-    var a = actualLines[actualLines.length - 1];
-    var b = expectedLines[expectedLines.length - 1];
-    var i = 0;
+    let a = actualLines[actualLines.length - 1];
+    let b = expectedLines[expectedLines.length - 1];
+    let i = 0;
     while (a === b) {
         if (i++ < 2) {
             end = `\n  ${a}${end}`;
@@ -88,8 +88,8 @@ function createErrDiff(actual, expected, operator) {
     }
 
     const maxLines = Math.max(actualLines.length, expectedLines.length);
-    var printedLines = 0;
-    var identical = 0;
+    let printedLines = 0;
+    let identical = 0;
     for (i = 0; i < maxLines; i++) {
         // Only extra expected lines exist
         const cur = i - lastPos;
@@ -187,7 +187,7 @@ class AssertionError extends Error {
         if (typeof options !== 'object' || options === null) {
             throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
         }
-        var {
+        let {
             actual,
             expected,
             message,

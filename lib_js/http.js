@@ -49,9 +49,10 @@ function calculateServerName(options, req) {
 }
 
 class Agent {
-    requests = {};
+    /*requests = {};
     sockets = {};
-    freeSockets = {};
+    freeSockets = {};*/
+    // mark
 
     constructor(options) {
         this.options = Object.assign({}, options);
@@ -562,6 +563,8 @@ class Server extends net.Server {
     keepAliveTimeout = 5000;
     timeout = 120000;
     maxHeadersCount = 2000;
+
+    //$
 
     // event checkContinue
     // event checkExpectation

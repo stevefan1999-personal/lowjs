@@ -129,7 +129,7 @@ function getBuffer(fd, assertLine) {
     do {
         const buffer = Buffer.allocUnsafe(bytesPerRead);
         bytesRead = readSync(fd, buffer, 0, bytesPerRead);
-        for (var i = 0; i < bytesRead; i++) {
+        for (let i = 0; i < bytesRead; i++) {
             if (buffer[i] === 10) {
                 lines++;
                 if (lines === assertLine) {
@@ -660,7 +660,7 @@ assert.ifError = function ifError(err) {
             tmp2.shift();
             // Filter all frames existing in err.stack.
             let tmp1 = newErr.stack.split('\n');
-            for (var i = 0; i < tmp2.length; i++) {
+            for (let i = 0; i < tmp2.length; i++) {
                 // Find the first occurrence of the frame.
                 const pos = tmp1.indexOf(tmp2[i]);
                 if (pos !== -1) {

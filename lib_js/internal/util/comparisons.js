@@ -123,8 +123,8 @@ function strictDeepEqual(val1, val2, memos) {
       if (!innerDeepEqual(val1Value, val2.valueOf(), true))
         return false;
       // Fast path for boxed primitives
-      var lengthval1 = 0;
-      var lengthval2 = 0;
+      let lengthval1 = 0;
+      let lengthval2 = 0;
       if (typeof val1Value === 'string') {
         lengthval1 = val1.length;
         lengthval2 = val2.length;
@@ -181,17 +181,17 @@ function keyCheck(val1, val2, strict, memos, lengthA, lengthB) {
   // c) Equivalent values for every corresponding key/index
   // d) For Sets and Maps, equal contents
   // Note: this accounts for both named and indexed properties on Arrays.
-  var aKeys = Object.keys(val1);
-  var bKeys = Object.keys(val2);
-  var i;
+  let aKeys = Object.keys(val1);
+  let bKeys = Object.keys(val2);
+  let i;
 
   // The pair must have the same number of owned properties.
   if (aKeys.length !== bKeys.length)
     return false;
 
   if (strict) {
-    var symbolKeysA = Object.getOwnPropertySymbols(val1);
-    var symbolKeysB = Object.getOwnPropertySymbols(val2);
+    let symbolKeysA = Object.getOwnPropertySymbols(val1);
+    let symbolKeysB = Object.getOwnPropertySymbols(val2);
     if (symbolKeysA.length !== 0) {
       symbolKeysA = symbolKeysA.filter((k) =>
         propertyIsEnumerable.call(val1, k));
@@ -294,8 +294,8 @@ function setHasLoosePrim(a, b, val) {
   if (altValues === undefined)
     return false;
 
-  var matches = 1;
-  for (var i = 0; i < altValues.length; i++) {
+  let matches = 1;
+  for (let i = 0; i < altValues.length; i++) {
     if (b.has(altValues[i])) {
       matches--;
     }
@@ -319,7 +319,7 @@ function setEquiv(a, b, strict, memo) {
 
   // This is a lazily initiated Set of entries which have to be compared
   // pairwise.
-  var set = null;
+  let set = null;
   for (const val of a) {
     // Note: Checking for the objects first improves the performance for object
     // heavy sets but it is a minor slow down for primitives. As they are fast
@@ -355,7 +355,8 @@ function setEquiv(a, b, strict, memo) {
 }
 
 function findLooseMatchingPrimitives(prim) {
-  var values, number;
+  let values;
+  let number;
   switch (typeof prim) {
     case 'number':
       values = ['' + prim];
@@ -393,7 +394,7 @@ function mapHasLoosePrim(a, b, key1, memo, item1, item2) {
   const setA = new Set();
   const setB = new Set();
 
-  var keyCount = 1;
+  let keyCount = 1;
 
   setA.add(item1);
   if (b.has(key1)) {
@@ -401,8 +402,7 @@ function mapHasLoosePrim(a, b, key1, memo, item1, item2) {
     setB.add(item2);
   }
 
-  for (var i = 0; i < altKeys.length; i++) {
-    const key2 = altKeys[i];
+  for (const key2 of altKeys) {
     if (a.has(key2)) {
       keyCount++;
       setA.add(a.get(key2));
@@ -412,6 +412,7 @@ function mapHasLoosePrim(a, b, key1, memo, item1, item2) {
       setB.add(b.get(key2));
     }
   }
+
   if (keyCount !== 0 || setA.size !== setB.size)
     return false;
 
@@ -445,7 +446,7 @@ function mapEquiv(a, b, strict, memo) {
   if (a.size !== b.size)
     return false;
 
-  var set = null;
+  let set = null;
 
   for (const [key, item1] of a) {
     if (typeof key === 'object' && key !== null) {
@@ -495,11 +496,11 @@ function objEquiv(a, b, strict, keys, memos) {
 
   // The pair must have equivalent values for every corresponding key.
   // Possibly expensive deep test:
-  for (var i = 0; i < keys.length; i++) {
-    const key = keys[i];
+  for (const key of keys) {
     if (!innerDeepEqual(a[key], b[key], strict, memos))
       return false;
   }
+
   return true;
 }
 

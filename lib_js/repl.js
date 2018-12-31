@@ -87,7 +87,7 @@ const GLOBAL_OBJECT_PROPERTIES = [
     'ReferenceError', 'SyntaxError', 'TypeError', 'URIError', 'Math', 'JSON'
 ];
 const GLOBAL_OBJECT_PROPERTY_MAP = {};
-for (var n = 0; n < GLOBAL_OBJECT_PROPERTIES.length; n++) {
+for (let n = 0; n < GLOBAL_OBJECT_PROPERTIES.length; n++) {
     GLOBAL_OBJECT_PROPERTY_MAP[GLOBAL_OBJECT_PROPERTIES[n]] =
         GLOBAL_OBJECT_PROPERTIES[n];
 }
@@ -123,584 +123,727 @@ writer.options =
 
 exports._builtinLibs = builtinLibs;
 
-function REPLServer(prompt,
-    stream,
-    eval_,
-    useGlobal,
-    ignoreUndefined,
-    replMode) {
-    if (!(this instanceof REPLServer)) {
-        return new REPLServer(prompt,
-            stream,
-            eval_,
-            useGlobal,
-            ignoreUndefined,
-            replMode);
-    }
+class REPLServer {
+    constructor(prompt, stream, eval_, useGlobal, ignoreUndefined, replMode) {
+        if (!(this instanceof REPLServer)) {
+            return new REPLServer(prompt,
+                stream,
+                eval_,
+                useGlobal,
+                ignoreUndefined,
+                replMode);
+        }
 
-    var options, input, output, dom, breakEvalOnSigint;
-    if (prompt !== null && typeof prompt === 'object') {
-        // an options object was given
-        options = prompt;
-        stream = options.stream || options.socket;
-        input = options.input;
-        output = options.output;
-        eval_ = options.eval;
-        useGlobal = options.useGlobal;
-        ignoreUndefined = options.ignoreUndefined;
-        prompt = options.prompt;
-        dom = options.domain;
-        replMode = options.replMode;
-        breakEvalOnSigint = options.breakEvalOnSigint;
-    } else {
-        options = {};
-    }
+        let options;
+        let input;
+        let output;
+        let dom;
+        let breakEvalOnSigint;
+        if (prompt !== null && typeof prompt === 'object') {
+            // an options object was given
+            options = prompt;
+            stream = options.stream || options.socket;
+            input = options.input;
+            output = options.output;
+            eval_ = options.eval;
+            useGlobal = options.useGlobal;
+            ignoreUndefined = options.ignoreUndefined;
+            prompt = options.prompt;
+            dom = options.domain;
+            replMode = options.replMode;
+            breakEvalOnSigint = options.breakEvalOnSigint;
+        } else {
+            options = {};
+        }
 
-    if (breakEvalOnSigint && eval_) {
-        // Allowing this would not reflect user expectations.
-        // breakEvalOnSigint affects only the behavior of the default eval().
-        throw new ERR_INVALID_REPL_EVAL_CONFIG();
-    }
+        if (breakEvalOnSigint && eval_) {
+            // Allowing this would not reflect user expectations.
+            // breakEvalOnSigint affects only the behavior of the default eval().
+            throw new ERR_INVALID_REPL_EVAL_CONFIG();
+        }
 
-    var self = this;
+        const self = this;
 
-    self._domain = new EventEmitter();
-    self.useGlobal = !!useGlobal;
-    self.ignoreUndefined = !!ignoreUndefined;
-    self.replMode = replMode || exports.REPL_MODE_SLOPPY;
-    self.underscoreAssigned = false;
-    self.last = undefined;
-    self.underscoreErrAssigned = false;
-    self.lastError = undefined;
-    self.breakEvalOnSigint = !!breakEvalOnSigint;
-    self.editorMode = false;
-    // Context id for use with the inspector protocol.
-    self[kContextId] = undefined;
+        self._domain = new EventEmitter();
+        self.useGlobal = !!useGlobal;
+        self.ignoreUndefined = !!ignoreUndefined;
+        self.replMode = replMode || exports.REPL_MODE_SLOPPY;
+        self.underscoreAssigned = false;
+        self.last = undefined;
+        self.underscoreErrAssigned = false;
+        self.lastError = undefined;
+        self.breakEvalOnSigint = !!breakEvalOnSigint;
+        self.editorMode = false;
+        // Context id for use with the inspector protocol.
+        self[kContextId] = undefined;
 
-    // Just for backwards compat, see github.com/joyent/node/pull/7127
-    self.rli = this;
+        // Just for backwards compat, see github.com/joyent/node/pull/7127
+        self.rli = this;
 
-    const savedRegExMatches = ['', '', '', '', '', '', '', '', '', ''];
-    const sep = '\u0000\u0000\u0000';
-    const regExMatcher = new RegExp(`^${sep}(.*)${sep}(.*)${sep}(.*)${sep}(.*)` +
-        `${sep}(.*)${sep}(.*)${sep}(.*)${sep}(.*)` +
-        `${sep}(.*)$`);
+        const savedRegExMatches = ['', '', '', '', '', '', '', '', '', ''];
+        const sep = '\u0000\u0000\u0000';
+        const regExMatcher = new RegExp(`^${sep}(.*)${sep}(.*)${sep}(.*)${sep}(.*)` +
+            `${sep}(.*)${sep}(.*)${sep}(.*)${sep}(.*)` +
+            `${sep}(.*)$`);
 
-    eval_ = eval_ || defaultEval;
+        eval_ = eval_ || defaultEval;
 
-    // Pause taking in new input, and store the keys in a buffer.
-    const pausedBuffer = [];
-    let paused = false;
-    function pause() {
-        paused = true;
-    }
-    function unpause() {
-        if (!paused) return;
-        paused = false;
-        let entry;
-        while (entry = pausedBuffer.shift()) {
-            const [type, payload] = entry;
-            switch (type) {
-                case 'key': {
-                    const [d, key] = payload;
-                    self._ttyWrite(d, key);
+        // Pause taking in new input, and store the keys in a buffer.
+        const pausedBuffer = [];
+        let paused = false;
+        function pause() {
+            paused = true;
+        }
+        function unpause() {
+            if (!paused) return;
+            paused = false;
+            let entry;
+            while (entry = pausedBuffer.shift()) {
+                const [type, payload] = entry;
+                switch (type) {
+                    case 'key': {
+                        const [d, key] = payload;
+                        self._ttyWrite(d, key);
+                        break;
+                    }
+                    case 'close':
+                        self.emit('exit');
+                        break;
+                }
+                if (paused) {
                     break;
                 }
-                case 'close':
-                    self.emit('exit');
-                    break;
             }
-            if (paused) {
+        }
+
+        function defaultEval(code, context, file, cb) {
+            let err;
+            let result;
+            let script;
+            let wrappedErr;
+            let wrappedCmd = false;
+            let awaitPromise = false;
+            const input = code;
+
+            if (/^\s*\{/.test(code) && /\}\s*$/.test(code)) {
+                // It's confusing for `{ a : 1 }` to be interpreted as a block
+                // statement rather than an object literal.  So, we first try
+                // to wrap it in parentheses, so that it will be interpreted as
+                // an expression.
+                code = `(${code.trim()})\n`;
+                wrappedCmd = true;
+            }
+
+            // First, create the Script object to check the syntax
+            if (code === '\n')
+                return cb(null);
+
+            while (true) {
+                try {
+                    if (!/^\s*$/.test(code) &&
+                        self.replMode === exports.REPL_MODE_STRICT) {
+                        // "void 0" keeps the repl from returning "use strict" as the result
+                        // value for statements and declarations that don't return a value.
+                        code = `'use strict'; void 0;\n${code}`;
+                    }
+                    script = vm.createScript(code, {
+                        filename: file,
+                        displayErrors: true
+                    });
+                } catch (e) {
+                    debug('parse error %j', code, e);
+                    if (wrappedCmd) {
+                        // Unwrap and try again
+                        wrappedCmd = false;
+                        awaitPromise = false;
+                        code = input;
+                        wrappedErr = e;
+                        continue;
+                    }
+                    // Preserve original error for wrapped command
+                    const error = wrappedErr || e;
+                    if (isRecoverableError(error, code))
+                        err = new Recoverable(error);
+                    else
+                        err = error;
+                }
                 break;
             }
-        }
-    }
 
-    function defaultEval(code, context, file, cb) {
-        var err, result, script, wrappedErr;
-        var wrappedCmd = false;
-        var awaitPromise = false;
-        var input = code;
+            // This will set the values from `savedRegExMatches` to corresponding
+            // predefined RegExp properties `RegExp.$1`, `RegExp.$2` ... `RegExp.$9`
+            regExMatcher.test(savedRegExMatches.join(sep));
 
-        if (/^\s*\{/.test(code) && /\}\s*$/.test(code)) {
-            // It's confusing for `{ a : 1 }` to be interpreted as a block
-            // statement rather than an object literal.  So, we first try
-            // to wrap it in parentheses, so that it will be interpreted as
-            // an expression.
-            code = `(${code.trim()})\n`;
-            wrappedCmd = true;
-        }
+            let finished = false;
+            function finishExecution(err, result) {
+                if (finished) return;
+                finished = true;
 
-        // First, create the Script object to check the syntax
-        if (code === '\n')
-            return cb(null);
-
-        while (true) {
-            try {
-                if (!/^\s*$/.test(code) &&
-                    self.replMode === exports.REPL_MODE_STRICT) {
-                    // "void 0" keeps the repl from returning "use strict" as the result
-                    // value for statements and declarations that don't return a value.
-                    code = `'use strict'; void 0;\n${code}`;
+                // After executing the current expression, store the values of RegExp
+                // predefined properties back in `savedRegExMatches`
+                for (let idx = 1; idx < savedRegExMatches.length; idx += 1) {
+                    savedRegExMatches[idx] = RegExp[`$${idx}`];
                 }
-                script = vm.createScript(code, {
-                    filename: file,
-                    displayErrors: true
-                });
-            } catch (e) {
-                debug('parse error %j', code, e);
-                if (wrappedCmd) {
-                    // Unwrap and try again
-                    wrappedCmd = false;
-                    awaitPromise = false;
-                    code = input;
-                    wrappedErr = e;
-                    continue;
-                }
-                // Preserve original error for wrapped command
-                const error = wrappedErr || e;
-                if (isRecoverableError(error, code))
-                    err = new Recoverable(error);
-                else
-                    err = error;
-            }
-            break;
-        }
 
-        // This will set the values from `savedRegExMatches` to corresponding
-        // predefined RegExp properties `RegExp.$1`, `RegExp.$2` ... `RegExp.$9`
-        regExMatcher.test(savedRegExMatches.join(sep));
-
-        let finished = false;
-        function finishExecution(err, result) {
-            if (finished) return;
-            finished = true;
-
-            // After executing the current expression, store the values of RegExp
-            // predefined properties back in `savedRegExMatches`
-            for (var idx = 1; idx < savedRegExMatches.length; idx += 1) {
-                savedRegExMatches[idx] = RegExp[`$${idx}`];
+                cb(err, result);
             }
 
-            cb(err, result);
-        }
-
-        if (!err) {
-            // Unset raw mode during evaluation so that Ctrl+C raises a signal.
-            let previouslyInRawMode;
-            if (self.breakEvalOnSigint) {
-                previouslyInRawMode = self._setRawMode(false);
-            }
-
-            try {
-                try {
-                    const scriptOptions = {
-                        displayErrors: false,
-                        breakOnSigint: self.breakEvalOnSigint
-                    };
-
-                    if (self.useGlobal) {
-                        result = script.runInThisContext(scriptOptions);
-                    } else {
-                        result = script.runInContext(context, scriptOptions);
-                    }
-                } finally {
-                    if (self.breakEvalOnSigint) {
-                        // Reset terminal mode to its previous value.
-                        self._setRawMode(previouslyInRawMode);
-                    }
-                }
-            } catch (e) {
-                err = e;
-
-                if (err && err.code === 'ERR_SCRIPT_EXECUTION_INTERRUPTED') {
-                    // The stack trace for this case is not very useful anyway.
-                    Object.defineProperty(err, 'stack', { value: '' });
-                }
-
-                if (process.domain) {
-                    debug('not recoverable, send to domain');
-                    process.domain.emit('error', err);
-                    process.domain.exit();
-                    return;
-                }
-            }
-
-            if (awaitPromise && !err) {
-                let sigintListener;
-                pause();
-                let promise = result;
+            if (!err) {
+                // Unset raw mode during evaluation so that Ctrl+C raises a signal.
+                let previouslyInRawMode;
                 if (self.breakEvalOnSigint) {
-                    const interrupt = new Promise((resolve, reject) => {
-                        sigintListener = () => {
-                            reject(new ERR_SCRIPT_EXECUTION_INTERRUPTED());
-                        };
-                        prioritizedSigintQueue.add(sigintListener);
-                    });
-                    promise = Promise.race([promise, interrupt]);
+                    previouslyInRawMode = self._setRawMode(false);
                 }
 
-                promise.then((result) => {
-                    // Remove prioritized SIGINT listener if it was not called.
-                    // TODO(TimothyGu): Use Promise.prototype.finally when it becomes
-                    // available.
-                    prioritizedSigintQueue.delete(sigintListener);
+                try {
+                    try {
+                        const scriptOptions = {
+                            displayErrors: false,
+                            breakOnSigint: self.breakEvalOnSigint
+                        };
 
-                    finishExecution(undefined, result);
-                    unpause();
-                }, (err) => {
-                    // Remove prioritized SIGINT listener if it was not called.
-                    prioritizedSigintQueue.delete(sigintListener);
+                        if (self.useGlobal) {
+                            result = script.runInThisContext(scriptOptions);
+                        } else {
+                            result = script.runInContext(context, scriptOptions);
+                        }
+                    } finally {
+                        if (self.breakEvalOnSigint) {
+                            // Reset terminal mode to its previous value.
+                            self._setRawMode(previouslyInRawMode);
+                        }
+                    }
+                } catch (e) {
+                    err = e;
 
-                    if (err.code === 'ERR_SCRIPT_EXECUTION_INTERRUPTED') {
+                    if (err && err.code === 'ERR_SCRIPT_EXECUTION_INTERRUPTED') {
                         // The stack trace for this case is not very useful anyway.
                         Object.defineProperty(err, 'stack', { value: '' });
                     }
 
-                    unpause();
-                    if (err && process.domain) {
+                    if (process.domain) {
                         debug('not recoverable, send to domain');
                         process.domain.emit('error', err);
                         process.domain.exit();
                         return;
                     }
-                    finishExecution(err);
-                });
+                }
+
+                if (awaitPromise && !err) {
+                    let sigintListener;
+                    pause();
+                    let promise = result;
+                    if (self.breakEvalOnSigint) {
+                        const interrupt = new Promise((resolve, reject) => {
+                            sigintListener = () => {
+                                reject(new ERR_SCRIPT_EXECUTION_INTERRUPTED());
+                            };
+                            prioritizedSigintQueue.add(sigintListener);
+                        });
+                        promise = Promise.race([promise, interrupt]);
+                    }
+
+                    promise.then((result) => {
+                        // Remove prioritized SIGINT listener if it was not called.
+                        // TODO(TimothyGu): Use Promise.prototype.finally when it becomes
+                        // available.
+                        prioritizedSigintQueue.delete(sigintListener);
+
+                        finishExecution(undefined, result);
+                        unpause();
+                    }, (err) => {
+                        // Remove prioritized SIGINT listener if it was not called.
+                        prioritizedSigintQueue.delete(sigintListener);
+
+                        if (err.code === 'ERR_SCRIPT_EXECUTION_INTERRUPTED') {
+                            // The stack trace for this case is not very useful anyway.
+                            Object.defineProperty(err, 'stack', { value: '' });
+                        }
+
+                        unpause();
+                        if (err && process.domain) {
+                            debug('not recoverable, send to domain');
+                            process.domain.emit('error', err);
+                            process.domain.exit();
+                            return;
+                        }
+                        finishExecution(err);
+                    });
+                }
+            }
+
+            if (!awaitPromise || err) {
+                finishExecution(err, result);
             }
         }
 
-        if (!awaitPromise || err) {
-            finishExecution(err, result);
+        self.eval = eval_;
+
+        self._domain.on('error', function debugDomainError(e) {
+            debug('domain error');
+            const top = replMap.get(self);
+            const pstrace = Error.prepareStackTrace;
+            Error.prepareStackTrace = prepareStackTrace(pstrace);
+            if (typeof e === 'object')
+                internalUtil.decorateErrorStack(e);
+            Error.prepareStackTrace = pstrace;
+            const isError = internalUtil.isError(e);
+            if (!self.underscoreErrAssigned)
+                self.lastError = e;
+            if (e instanceof SyntaxError && e.stack) {
+                // remove repl:line-number and stack trace
+                e.stack = e.stack
+                    .replace(/^repl:\d+\r?\n/, '')
+                    .replace(/^\s+at\s.*\n?/gm, '');
+            } else if (isError && self.replMode === exports.REPL_MODE_STRICT) {
+                e.stack = e.stack.replace(/(\s+at\s+repl:)(\d+)/,
+                    (_, pre, line) => pre + (line - 1));
+            }
+            if (isError && e.stack) {
+                top.outputStream.write(`${e.stack}\n`);
+            } else {
+                top.outputStream.write(`Thrown: ${String(e)}\n`);
+            }
+            top.clearBufferedCommand();
+            top.lines.level = [];
+            top.displayPrompt();
+        });
+
+        if (!input && !output) {
+            // legacy API, passing a 'stream'/'socket' option
+            if (!stream) {
+                // Use stdin and stdout as the default streams if none were given
+                stream = process;
+            }
+            // We're given a duplex readable/writable Stream, like a `net.Socket`
+            // or a custom object with 2 streams, or the `process` object
+            input = stream.stdin || stream;
+            output = stream.stdout || stream;
         }
-    }
 
-    self.eval = eval_;
+        self.inputStream = input;
+        self.outputStream = output;
 
-    self._domain.on('error', function debugDomainError(e) {
-        debug('domain error');
-        const top = replMap.get(self);
-        const pstrace = Error.prepareStackTrace;
-        Error.prepareStackTrace = prepareStackTrace(pstrace);
-        if (typeof e === 'object')
-            internalUtil.decorateErrorStack(e);
-        Error.prepareStackTrace = pstrace;
-        const isError = internalUtil.isError(e);
-        if (!self.underscoreErrAssigned)
-            self.lastError = e;
-        if (e instanceof SyntaxError && e.stack) {
-            // remove repl:line-number and stack trace
-            e.stack = e.stack
-                .replace(/^repl:\d+\r?\n/, '')
-                .replace(/^\s+at\s.*\n?/gm, '');
-        } else if (isError && self.replMode === exports.REPL_MODE_STRICT) {
-            e.stack = e.stack.replace(/(\s+at\s+repl:)(\d+)/,
-                (_, pre, line) => pre + (line - 1));
+        self.resetContext();
+        self.lines.level = [];
+
+        self.clearBufferedCommand();
+        Object.defineProperty(this, 'bufferedCommand', {
+            get: util.deprecate(() => self[kBufferedCommandSymbol],
+                'REPLServer.bufferedCommand is deprecated', 'DEP0074'),
+            set: util.deprecate((val) => self[kBufferedCommandSymbol] = val,
+                'REPLServer.bufferedCommand is deprecated', 'DEP0074'),
+            enumerable: true
+        });
+
+        // Figure out which "complete" function to use.
+        self.completer = (typeof options.completer === 'function') ?
+            options.completer : completer;
+
+        function completer(text, cb) {
+            complete.call(self, text, self.editorMode ?
+                self.completeOnEditorMode(cb) : cb);
         }
-        if (isError && e.stack) {
-            top.outputStream.write(`${e.stack}\n`);
-        } else {
-            top.outputStream.write(`Thrown: ${String(e)}\n`);
+
+        Interface.call(this, {
+            input: self.inputStream,
+            output: self.outputStream,
+            completer: self.completer,
+            terminal: options.terminal,
+            historySize: options.historySize,
+            prompt
+        });
+
+        this.commands = Object.create(null);
+        defineDefaultCommands(this);
+
+        // Figure out which "writer" function to use
+        self.writer = options.writer || exports.writer;
+
+        if (options.useColors === undefined) {
+            options.useColors = self.terminal;
         }
-        top.clearBufferedCommand();
-        top.lines.level = [];
-        top.displayPrompt();
-    });
+        self.useColors = !!options.useColors;
 
-    if (!input && !output) {
-        // legacy API, passing a 'stream'/'socket' option
-        if (!stream) {
-            // Use stdin and stdout as the default streams if none were given
-            stream = process;
+        if (self.useColors && self.writer === writer) {
+            // Turn on ANSI coloring.
+            self.writer = (obj) => util.inspect(obj, self.writer.options);
+            self.writer.options = Object.assign({}, writer.options, { colors: true });
         }
-        // We're given a duplex readable/writable Stream, like a `net.Socket`
-        // or a custom object with 2 streams, or the `process` object
-        input = stream.stdin || stream;
-        output = stream.stdout || stream;
-    }
 
-    self.inputStream = input;
-    self.outputStream = output;
+        function filterInternalStackFrames(structuredStack) {
+            // Search from the bottom of the call stack to
+            // find the first frame with a null function name
+            if (typeof structuredStack !== 'object')
+                return structuredStack;
+            const idx = structuredStack.reverse().findIndex(
+                (frame) => frame.getFunctionName() === null);
 
-    self.resetContext();
-    self.lines.level = [];
-
-    self.clearBufferedCommand();
-    Object.defineProperty(this, 'bufferedCommand', {
-        get: util.deprecate(() => self[kBufferedCommandSymbol],
-            'REPLServer.bufferedCommand is deprecated', 'DEP0074'),
-        set: util.deprecate((val) => self[kBufferedCommandSymbol] = val,
-            'REPLServer.bufferedCommand is deprecated', 'DEP0074'),
-        enumerable: true
-    });
-
-    // Figure out which "complete" function to use.
-    self.completer = (typeof options.completer === 'function') ?
-        options.completer : completer;
-
-    function completer(text, cb) {
-        complete.call(self, text, self.editorMode ?
-            self.completeOnEditorMode(cb) : cb);
-    }
-
-    Interface.call(this, {
-        input: self.inputStream,
-        output: self.outputStream,
-        completer: self.completer,
-        terminal: options.terminal,
-        historySize: options.historySize,
-        prompt
-    });
-
-    this.commands = Object.create(null);
-    defineDefaultCommands(this);
-
-    // Figure out which "writer" function to use
-    self.writer = options.writer || exports.writer;
-
-    if (options.useColors === undefined) {
-        options.useColors = self.terminal;
-    }
-    self.useColors = !!options.useColors;
-
-    if (self.useColors && self.writer === writer) {
-        // Turn on ANSI coloring.
-        self.writer = (obj) => util.inspect(obj, self.writer.options);
-        self.writer.options = Object.assign({}, writer.options, { colors: true });
-    }
-
-    function filterInternalStackFrames(structuredStack) {
-        // Search from the bottom of the call stack to
-        // find the first frame with a null function name
-        if (typeof structuredStack !== 'object')
+            // If found, get rid of it and everything below it
+            structuredStack = structuredStack.splice(idx + 1);
             return structuredStack;
-        const idx = structuredStack.reverse().findIndex(
-            (frame) => frame.getFunctionName() === null);
+        }
 
-        // If found, get rid of it and everything below it
-        structuredStack = structuredStack.splice(idx + 1);
-        return structuredStack;
+        function prepareStackTrace(fn) {
+            return (error, stackFrames) => {
+                const frames = filterInternalStackFrames(stackFrames);
+                if (fn) {
+                    return fn(error, frames);
+                }
+                frames.push(error);
+                return frames.reverse().join('\n    at ');
+            };
+        }
+
+        function _parseREPLKeyword(keyword, rest) {
+            const cmd = this.commands[keyword];
+            if (cmd) {
+                cmd.action.call(this, rest);
+                return true;
+            }
+            return false;
+        }
+
+        self.parseREPLKeyword = util.deprecate(
+            _parseREPLKeyword,
+            'REPLServer.parseREPLKeyword() is deprecated',
+            'DEP0075');
+
+        self.on('close', function emitExit() {
+            if (paused) {
+                pausedBuffer.push(['close']);
+                return;
+            }
+            self.emit('exit');
+        });
+
+        let sawSIGINT = false;
+        let sawCtrlD = false;
+        const prioritizedSigintQueue = new Set();
+        self.on('SIGINT', function onSigInt() {
+            if (prioritizedSigintQueue.size > 0) {
+                for (const task of prioritizedSigintQueue) {
+                    task();
+                }
+                return;
+            }
+
+            const empty = self.line.length === 0;
+            self.clearLine();
+            _turnOffEditorMode(self);
+
+            const cmd = self[kBufferedCommandSymbol];
+            if (!(cmd && cmd.length > 0) && empty) {
+                if (sawSIGINT) {
+                    self.close();
+                    sawSIGINT = false;
+                    return;
+                }
+                self.output.write('(To exit, press ^C again or type .exit)\n');
+                sawSIGINT = true;
+            } else {
+                sawSIGINT = false;
+            }
+
+            self.clearBufferedCommand();
+            self.lines.level = [];
+            self.displayPrompt();
+        });
+
+        self.on('line', function onLine(cmd) {
+            debug('line %j', cmd);
+            cmd = cmd || '';
+            sawSIGINT = false;
+
+            if (self.editorMode) {
+                self[kBufferedCommandSymbol] += cmd + '\n';
+
+                // code alignment
+                const matches = self._sawKeyPress ? cmd.match(/^\s+/) : null;
+                if (matches) {
+                    const prefix = matches[0];
+                    self.write(prefix);
+                    self.line = prefix;
+                    self.cursor = prefix.length;
+                }
+                _memory.call(self, cmd);
+                return;
+            }
+
+            // Check REPL keywords and empty lines against a trimmed line input.
+            const trimmedCmd = cmd.trim();
+
+            // Check to see if a REPL keyword was used. If it returns true,
+            // display next prompt and return.
+            if (trimmedCmd) {
+                if (trimmedCmd.charAt(0) === '.' && trimmedCmd.charAt(1) !== '.' &&
+                    Number.isNaN(parseFloat(trimmedCmd))) {
+                    const matches = trimmedCmd.match(/^\.([^\s]+)\s*(.*)$/);
+                    const keyword = matches && matches[1];
+                    const rest = matches && matches[2];
+                    if (_parseREPLKeyword.call(self, keyword, rest) === true) {
+                        return;
+                    }
+                    if (!self[kBufferedCommandSymbol]) {
+                        self.outputStream.write('Invalid REPL keyword\n');
+                        finish(null);
+                        return;
+                    }
+                }
+            }
+
+            const evalCmd = self[kBufferedCommandSymbol] + cmd + '\n';
+
+            debug('eval %j', evalCmd);
+            self.eval(evalCmd, self.context, 'repl', finish);
+
+            function finish(e, ret) {
+                debug('finish', e, ret);
+                _memory.call(self, cmd);
+
+                if (e && !self[kBufferedCommandSymbol] && cmd.trim().startsWith('npm ')) {
+                    self.outputStream.write('npm should be run outside of the ' +
+                        'node repl, in your normal shell.\n' +
+                        '(Press Control-D to exit.)\n');
+                    self.clearBufferedCommand();
+                    self.displayPrompt();
+                    return;
+                }
+
+                // If error was SyntaxError and not JSON.parse error
+                if (e) {
+                    if (e instanceof Recoverable && !sawCtrlD) {
+                        // Start buffering data like that:
+                        // {
+                        // ...  x: 1
+                        // ... }
+                        self[kBufferedCommandSymbol] += cmd + '\n';
+                        self.displayPrompt();
+                        return;
+                    } else {
+                        self._domain.emit('error', e.err || e);
+                    }
+                }
+
+                // Clear buffer if no SyntaxErrors
+                self.clearBufferedCommand();
+                sawCtrlD = false;
+
+                // If we got any output - print it (if no error)
+                if (!e &&
+                    // When an invalid REPL command is used, error message is printed
+                    // immediately. We don't have to print anything else. So, only when
+                    // the second argument to this function is there, print it.
+                    arguments.length === 2 &&
+                    (!self.ignoreUndefined || ret !== undefined)) {
+                    if (!self.underscoreAssigned) {
+                        self.last = ret;
+                    }
+                    self.outputStream.write(self.writer(ret) + '\n');
+                }
+
+                // Display prompt again
+                self.displayPrompt();
+            }
+        });
+
+        self.on('SIGCONT', function onSigCont() {
+            if (self.editorMode) {
+                self.outputStream.write(`${self._initialPrompt}.editor\n`);
+                self.outputStream.write(
+                    '// Entering editor mode (^D to finish, ^C to cancel)\n');
+                self.outputStream.write(`${self[kBufferedCommandSymbol]}\n`);
+                self.prompt(true);
+            } else {
+                self.displayPrompt(true);
+            }
+        });
+
+        // Wrap readline tty to enable editor mode and pausing.
+        const ttyWrite = self._ttyWrite.bind(self);
+        self._ttyWrite = (d, key) => {
+            key = key || {};
+            if (paused && !(self.breakEvalOnSigint && key.ctrl && key.name === 'c')) {
+                pausedBuffer.push(['key', [d, key]]);
+                return;
+            }
+            if (!self.editorMode || !self.terminal) {
+                ttyWrite(d, key);
+                return;
+            }
+
+            // Editor mode
+            if (key.ctrl && !key.shift) {
+                switch (key.name) {
+                    case 'd': // End editor mode
+                        _turnOffEditorMode(self);
+                        sawCtrlD = true;
+                        ttyWrite(d, { name: 'return' });
+                        break;
+                    case 'n': // Override next history item
+                    case 'p': // Override previous history item
+                        break;
+                    default:
+                        ttyWrite(d, key);
+                }
+            } else {
+                switch (key.name) {
+                    case 'up':   // Override previous history item
+                    case 'down': // Override next history item
+                        break;
+                    case 'tab':
+                        // Prevent double tab behavior
+                        self._previousKey = null;
+                        ttyWrite(d, key);
+                        break;
+                    default:
+                        ttyWrite(d, key);
+                }
+            }
+        };
+
+        self.displayPrompt();
     }
 
-    function prepareStackTrace(fn) {
-        return (error, stackFrames) => {
-            const frames = filterInternalStackFrames(stackFrames);
-            if (fn) {
-                return fn(error, frames);
+    clearBufferedCommand() {
+        this[kBufferedCommandSymbol] = '';
+    }
+
+    close() {
+        if (this.terminal && this._flushing && !this._closingOnFlush) {
+            this._closingOnFlush = true;
+            this.once('flushHistory', () =>
+                Interface.prototype.close.call(this)
+            );
+
+            return;
+        }
+        process.nextTick(() =>
+            Interface.prototype.close.call(this)
+        );
+    }
+
+    createContext() {
+        let context;
+        if (this.useGlobal) {
+            console.log("aa");
+            context = global;
+        } else {
+            context = vm.createContext();
+
+            context.global = context;
+            const _console = new Console(this.outputStream);
+            Object.defineProperty(context, 'console', {
+                configurable: true,
+                writable: true,
+                value: _console
+            });
+
+            const names = Object.getOwnPropertyNames(global);
+
+            for (const name of names) {
+                if (name === 'console' || name === 'global')
+                    continue;
+                Object.defineProperty(context, name,
+                    Object.getOwnPropertyDescriptor(global, name));
             }
-            frames.push(error);
-            return frames.reverse().join('\n    at ');
+        }
+
+        let module = native.makeModule('<repl>', parentModule);
+        Object.assign(context, {
+            module,
+            require: module.require,
+        });
+        return context;
+    }
+
+    resetContext() {
+        this.context = this.createContext();
+        this.underscoreAssigned = false;
+        this.underscoreErrAssigned = false;
+        this.lines = [];
+        this.lines.level = [];
+
+        Object.defineProperty(this.context, '_', {
+            configurable: true,
+            get: () => this.last,
+            set: (value) => {
+                this.last = value;
+                if (!this.underscoreAssigned) {
+                    this.underscoreAssigned = true;
+                    this.outputStream.write('Expression assignment to _ now disabled.\n');
+                }
+            }
+        });
+
+        Object.defineProperty(this.context, '_error', {
+            configurable: true,
+            get: () => this.lastError,
+            set: (value) => {
+                this.lastError = value;
+                if (!this.underscoreErrAssigned) {
+                    this.underscoreErrAssigned = true;
+                    this.outputStream.write(
+                        'Expression assignment to _error now disabled.\n');
+                }
+            }
+        });
+
+        // Allow REPL extensions to extend the new context
+        this.emit('reset', this.context);
+    }
+
+    displayPrompt(preserveCursor) {
+        let prompt = this._initialPrompt;
+        if (this[kBufferedCommandSymbol].length) {
+            prompt = '...';
+            const len = this.lines.level.length ? this.lines.level.length - 1 : 0;
+            const levelInd = '..'.repeat(len);
+            prompt += levelInd + ' ';
+        }
+
+        // Do not overwrite `_initialPrompt` here
+        REPLServer.super_.prototype.setPrompt.call(this, prompt);
+        this.prompt(preserveCursor);
+    }
+
+    // When invoked as an API method, overwrite _initialPrompt
+    setPrompt(prompt) {
+        this._initialPrompt = prompt;
+        REPLServer.super_.prototype.setPrompt.call(this, prompt);
+    }
+
+    complete(...args) {
+        this.completer(...args);
+    }
+
+    completeOnEditorMode(callback) {
+        return (err, results) => {
+            if (err) return callback(err);
+
+            const [completions, completeOn = ''] = results;
+            const prefixLength = completeOn.length;
+
+            if (prefixLength === 0) return callback(null, [[], completeOn]);
+
+            const isNotEmpty = (v) => v.length > 0;
+            const trimCompleteOnPrefix = (v) => v.substring(prefixLength);
+            const data = completions.filter(isNotEmpty).map(trimCompleteOnPrefix);
+
+            callback(null, [[`${completeOn}${longestCommonPrefix(data)}`], completeOn]);
         };
     }
 
-    function _parseREPLKeyword(keyword, rest) {
-        var cmd = this.commands[keyword];
-        if (cmd) {
-            cmd.action.call(this, rest);
-            return true;
+    defineCommand(keyword, cmd) {
+        if (typeof cmd === 'function') {
+            cmd = { action: cmd };
+        } else if (typeof cmd.action !== 'function') {
+            throw new ERR_INVALID_ARG_TYPE('action', 'Function', cmd.action);
         }
-        return false;
+        this.commands[keyword] = cmd;
     }
-
-    self.parseREPLKeyword = util.deprecate(
-        _parseREPLKeyword,
-        'REPLServer.parseREPLKeyword() is deprecated',
-        'DEP0075');
-
-    self.on('close', function emitExit() {
-        if (paused) {
-            pausedBuffer.push(['close']);
-            return;
-        }
-        self.emit('exit');
-    });
-
-    var sawSIGINT = false;
-    var sawCtrlD = false;
-    const prioritizedSigintQueue = new Set();
-    self.on('SIGINT', function onSigInt() {
-        if (prioritizedSigintQueue.size > 0) {
-            for (const task of prioritizedSigintQueue) {
-                task();
-            }
-            return;
-        }
-
-        var empty = self.line.length === 0;
-        self.clearLine();
-        _turnOffEditorMode(self);
-
-        const cmd = self[kBufferedCommandSymbol];
-        if (!(cmd && cmd.length > 0) && empty) {
-            if (sawSIGINT) {
-                self.close();
-                sawSIGINT = false;
-                return;
-            }
-            self.output.write('(To exit, press ^C again or type .exit)\n');
-            sawSIGINT = true;
-        } else {
-            sawSIGINT = false;
-        }
-
-        self.clearBufferedCommand();
-        self.lines.level = [];
-        self.displayPrompt();
-    });
-
-    self.on('line', function onLine(cmd) {
-        debug('line %j', cmd);
-        cmd = cmd || '';
-        sawSIGINT = false;
-
-        if (self.editorMode) {
-            self[kBufferedCommandSymbol] += cmd + '\n';
-
-            // code alignment
-            const matches = self._sawKeyPress ? cmd.match(/^\s+/) : null;
-            if (matches) {
-                const prefix = matches[0];
-                self.write(prefix);
-                self.line = prefix;
-                self.cursor = prefix.length;
-            }
-            _memory.call(self, cmd);
-            return;
-        }
-
-        // Check REPL keywords and empty lines against a trimmed line input.
-        const trimmedCmd = cmd.trim();
-
-        // Check to see if a REPL keyword was used. If it returns true,
-        // display next prompt and return.
-        if (trimmedCmd) {
-            if (trimmedCmd.charAt(0) === '.' && trimmedCmd.charAt(1) !== '.' &&
-                Number.isNaN(parseFloat(trimmedCmd))) {
-                const matches = trimmedCmd.match(/^\.([^\s]+)\s*(.*)$/);
-                const keyword = matches && matches[1];
-                const rest = matches && matches[2];
-                if (_parseREPLKeyword.call(self, keyword, rest) === true) {
-                    return;
-                }
-                if (!self[kBufferedCommandSymbol]) {
-                    self.outputStream.write('Invalid REPL keyword\n');
-                    finish(null);
-                    return;
-                }
-            }
-        }
-
-        const evalCmd = self[kBufferedCommandSymbol] + cmd + '\n';
-
-        debug('eval %j', evalCmd);
-        self.eval(evalCmd, self.context, 'repl', finish);
-
-        function finish(e, ret) {
-            debug('finish', e, ret);
-            _memory.call(self, cmd);
-
-            if (e && !self[kBufferedCommandSymbol] && cmd.trim().startsWith('npm ')) {
-                self.outputStream.write('npm should be run outside of the ' +
-                    'node repl, in your normal shell.\n' +
-                    '(Press Control-D to exit.)\n');
-                self.clearBufferedCommand();
-                self.displayPrompt();
-                return;
-            }
-
-            // If error was SyntaxError and not JSON.parse error
-            if (e) {
-                if (e instanceof Recoverable && !sawCtrlD) {
-                    // Start buffering data like that:
-                    // {
-                    // ...  x: 1
-                    // ... }
-                    self[kBufferedCommandSymbol] += cmd + '\n';
-                    self.displayPrompt();
-                    return;
-                } else {
-                    self._domain.emit('error', e.err || e);
-                }
-            }
-
-            // Clear buffer if no SyntaxErrors
-            self.clearBufferedCommand();
-            sawCtrlD = false;
-
-            // If we got any output - print it (if no error)
-            if (!e &&
-                // When an invalid REPL command is used, error message is printed
-                // immediately. We don't have to print anything else. So, only when
-                // the second argument to this function is there, print it.
-                arguments.length === 2 &&
-                (!self.ignoreUndefined || ret !== undefined)) {
-                if (!self.underscoreAssigned) {
-                    self.last = ret;
-                }
-                self.outputStream.write(self.writer(ret) + '\n');
-            }
-
-            // Display prompt again
-            self.displayPrompt();
-        }
-    });
-
-    self.on('SIGCONT', function onSigCont() {
-        if (self.editorMode) {
-            self.outputStream.write(`${self._initialPrompt}.editor\n`);
-            self.outputStream.write(
-                '// Entering editor mode (^D to finish, ^C to cancel)\n');
-            self.outputStream.write(`${self[kBufferedCommandSymbol]}\n`);
-            self.prompt(true);
-        } else {
-            self.displayPrompt(true);
-        }
-    });
-
-    // Wrap readline tty to enable editor mode and pausing.
-    const ttyWrite = self._ttyWrite.bind(self);
-    self._ttyWrite = (d, key) => {
-        key = key || {};
-        if (paused && !(self.breakEvalOnSigint && key.ctrl && key.name === 'c')) {
-            pausedBuffer.push(['key', [d, key]]);
-            return;
-        }
-        if (!self.editorMode || !self.terminal) {
-            ttyWrite(d, key);
-            return;
-        }
-
-        // Editor mode
-        if (key.ctrl && !key.shift) {
-            switch (key.name) {
-                case 'd': // End editor mode
-                    _turnOffEditorMode(self);
-                    sawCtrlD = true;
-                    ttyWrite(d, { name: 'return' });
-                    break;
-                case 'n': // Override next history item
-                case 'p': // Override previous history item
-                    break;
-                default:
-                    ttyWrite(d, key);
-            }
-        } else {
-            switch (key.name) {
-                case 'up':   // Override previous history item
-                case 'down': // Override next history item
-                    break;
-                case 'tab':
-                    // Prevent double tab behavior
-                    self._previousKey = null;
-                    ttyWrite(d, key);
-                    break;
-                default:
-                    ttyWrite(d, key);
-            }
-        }
-    };
-
-    self.displayPrompt();
 }
+
 inherits(REPLServer, Interface);
 exports.REPLServer = REPLServer;
 
@@ -709,13 +852,8 @@ exports.REPL_MODE_STRICT = Symbol('repl-strict');
 
 // prompt is a string to print on each line for the prompt,
 // source is a stream to use for I/O, defaulting to stdin/stdout.
-exports.start = function (prompt,
-    source,
-    eval_,
-    useGlobal,
-    ignoreUndefined,
-    replMode) {
-    var repl = new REPLServer(prompt,
+exports.start = (prompt, source, eval_, useGlobal, ignoreUndefined, replMode) => {
+    const repl = new REPLServer(prompt,
         source,
         eval_,
         useGlobal,
@@ -726,114 +864,6 @@ exports.start = function (prompt,
     return repl;
 };
 
-REPLServer.prototype.clearBufferedCommand = function clearBufferedCommand() {
-    this[kBufferedCommandSymbol] = '';
-};
-
-REPLServer.prototype.close = function close() {
-    if (this.terminal && this._flushing && !this._closingOnFlush) {
-        this._closingOnFlush = true;
-        this.once('flushHistory', () =>
-            Interface.prototype.close.call(this)
-        );
-
-        return;
-    }
-    process.nextTick(() =>
-        Interface.prototype.close.call(this)
-    );
-};
-
-REPLServer.prototype.createContext = function () {
-    var context;
-    if (this.useGlobal) {
-        console.log("aa");
-        context = global;
-    } else {
-        context = vm.createContext();
-
-        context.global = context;
-        const _console = new Console(this.outputStream);
-        Object.defineProperty(context, 'console', {
-            configurable: true,
-            writable: true,
-            value: _console
-        });
-
-        var names = Object.getOwnPropertyNames(global);
-        for (var n = 0; n < names.length; n++) {
-            var name = names[n];
-            if (name === 'console' || name === 'global')
-                continue;
-            Object.defineProperty(context, name,
-                Object.getOwnPropertyDescriptor(global, name));
-        }
-    }
-
-    let module = native.makeModule('<repl>', parentModule);
-    Object.assign(context, {
-        module,
-        require: module.require,
-    });
-    return context;
-};
-
-REPLServer.prototype.resetContext = function () {
-    this.context = this.createContext();
-    this.underscoreAssigned = false;
-    this.underscoreErrAssigned = false;
-    this.lines = [];
-    this.lines.level = [];
-
-    Object.defineProperty(this.context, '_', {
-        configurable: true,
-        get: () => this.last,
-        set: (value) => {
-            this.last = value;
-            if (!this.underscoreAssigned) {
-                this.underscoreAssigned = true;
-                this.outputStream.write('Expression assignment to _ now disabled.\n');
-            }
-        }
-    });
-
-    Object.defineProperty(this.context, '_error', {
-        configurable: true,
-        get: () => this.lastError,
-        set: (value) => {
-            this.lastError = value;
-            if (!this.underscoreErrAssigned) {
-                this.underscoreErrAssigned = true;
-                this.outputStream.write(
-                    'Expression assignment to _error now disabled.\n');
-            }
-        }
-    });
-
-    // Allow REPL extensions to extend the new context
-    this.emit('reset', this.context);
-};
-
-REPLServer.prototype.displayPrompt = function (preserveCursor) {
-    var prompt = this._initialPrompt;
-    if (this[kBufferedCommandSymbol].length) {
-        prompt = '...';
-        const len = this.lines.level.length ? this.lines.level.length - 1 : 0;
-        const levelInd = '..'.repeat(len);
-        prompt += levelInd + ' ';
-    }
-
-    // Do not overwrite `_initialPrompt` here
-    REPLServer.super_.prototype.setPrompt.call(this, prompt);
-    this.prompt(preserveCursor);
-};
-
-// When invoked as an API method, overwrite _initialPrompt
-REPLServer.prototype.setPrompt = function setPrompt(prompt) {
-    this._initialPrompt = prompt;
-    REPLServer.super_.prototype.setPrompt.call(this, prompt);
-};
-
 REPLServer.prototype.turnOffEditorMode = util.deprecate(
     function () { _turnOffEditorMode(this); },
     'REPLServer.turnOffEditorMode() is deprecated',
@@ -841,19 +871,22 @@ REPLServer.prototype.turnOffEditorMode = util.deprecate(
 
 // A stream to push an array into a REPL
 // used in REPLServer.complete
-function ArrayStream() {
-    Stream.call(this);
+class ArrayStream extends Stream {
+    constructor() {
+        super();
 
-    this.run = function (data) {
-        for (var n = 0; n < data.length; n++)
-            this.emit('data', `${data[n]}\n`);
-    };
+        this.run = function (data) {
+            for (let n = 0; n < data.length; n++)
+                this.emit('data', `${data[n]}\n`);
+        };
+    }
+
+    resume() { }
+    write() { }
 }
-util.inherits(ArrayStream, Stream);
+
 ArrayStream.prototype.readable = true;
 ArrayStream.prototype.writable = true;
-ArrayStream.prototype.resume = function () { };
-ArrayStream.prototype.write = function () { };
 
 const requireRE = /\brequire\s*\(['"](([\w@./-]+\/)?(?:[\w@./-]*))/;
 const simpleExpressionRE =
@@ -868,7 +901,7 @@ function isIdentifier(str) {
         return false;
     }
     const firstLen = first > 0xffff ? 2 : 1;
-    for (var i = firstLen; i < str.length; i += 1) {
+    for (let i = firstLen; i < str.length; i += 1) {
         const cp = str.codePointAt(i);
         if (!isIdentifierChar(cp)) {
             return false;
@@ -910,10 +943,6 @@ function filteredOwnPropertyNames(obj) {
     return Object.getOwnPropertyNames(obj).filter(isIdentifier);
 }
 
-REPLServer.prototype.complete = function () {
-    this.completer.apply(this, arguments);
-};
-
 // Provide a list of completions for the given leading text. This is
 // given to the readline interface for handling tab completion.
 //
@@ -929,16 +958,17 @@ function complete(line, callback) {
     if (this[kBufferedCommandSymbol] !== undefined &&
         this[kBufferedCommandSymbol].length) {
         // Get a new array of inputted lines
-        var tmp = this.lines.slice();
+        const tmp = this.lines.slice();
+
         // Kill off all function declarations to push all local variables into
         // global scope
-        for (var n = 0; n < this.lines.level.length; n++) {
-            var kill = this.lines.level[n];
+        for (const kill of this.lines.level) {
             if (kill.isFunction)
                 tmp[kill.line] = '';
         }
-        var flat = new ArrayStream();         // make a new "input" stream
-        var magic = new REPLServer('', flat); // make a nested REPL
+
+        const flat = new ArrayStream();         // make a new "input" stream
+        const magic = new REPLServer('', flat); // make a nested REPL
         replMap.set(magic, replMap.get(this));
         flat.run(tmp);                        // eval the flattened code
         // all this is only profitable if the nested REPL
@@ -948,14 +978,17 @@ function complete(line, callback) {
         }
     }
 
-    var completions;
+    let completions;
     // List of completion lists, one for each inheritance "level"
-    var completionGroups = [];
-    var completeOn, i, group, c;
+    let completionGroups = [];
+    let completeOn;
+    let i;
+    let group;
+    let c;
 
     // REPL commands (e.g. ".break").
-    var filter;
-    var match = null;
+    let filter;
+    let match = null;
     match = line.match(/^\s*\.(\w*)$/);
     if (match) {
         completionGroups.push(Object.keys(this.commands));
@@ -968,14 +1001,23 @@ function complete(line, callback) {
     } else if (match = line.match(requireRE)) {
         // require('...<Tab>')
         const exts = Object.keys(this.context.require.extensions);
-        var indexRe = new RegExp('^index(?:' + exts.map(regexpEscape).join('|') +
+        const indexRe = new RegExp('^index(?:' + exts.map(regexpEscape).join('|') +
             ')$');
-        var versionedFileNamesRe = /-\d+\.\d+/;
+        const versionedFileNamesRe = /-\d+\.\d+/;
 
         completeOn = match[1];
-        var subdir = match[2] || '';
+        const subdir = match[2] || '';
         filter = match[1];
-        var dir, files, f, name, base, ext, abs, subfiles, s, isDirectory;
+        let dir;
+        let files;
+        let f;
+        let name;
+        let base;
+        let ext;
+        let abs;
+        let subfiles;
+        let s;
+        let isDirectory;
         group = [];
         let paths = [];
 
@@ -1050,7 +1092,7 @@ function complete(line, callback) {
     } else if (line.length === 0 || /\w|\.|\$/.test(line[line.length - 1])) {
         match = simpleExpressionRE.exec(line);
         if (line.length === 0 || match) {
-            var expr;
+            let expr;
             completeOn = (match ? match[0] : '');
             if (line.length === 0) {
                 filter = '';
@@ -1059,19 +1101,19 @@ function complete(line, callback) {
                 filter = '';
                 expr = match[0].slice(0, match[0].length - 1);
             } else {
-                var bits = match[0].split('.');
+                const bits = match[0].split('.');
                 filter = bits.pop();
                 expr = bits.join('.');
             }
 
             // Resolve expr and get its completions.
-            var memberGroups = [];
+            const memberGroups = [];
             if (!expr) {
                 // If context is instance of vm.ScriptContext
                 // Get global vars synchronously
                 if (this.useGlobal || vm.isContext(this.context)) {
                     //completionGroups.push(getGlobalLexicalScopeNames(this[kContextId]));
-                    var contextProto = this.context;
+                    let contextProto = this.context;
                     while (contextProto = Object.getPrototypeOf(contextProto)) {
                         completionGroups.push(
                             filteredOwnPropertyNames.call(this, contextProto));
@@ -1086,7 +1128,7 @@ function complete(line, callback) {
                             addStandardGlobals(completionGroups, filter);
                         } else if (Array.isArray(globals[0])) {
                             // Add grouped globals
-                            for (var n = 0; n < globals.length; n++)
+                            for (let n = 0; n < globals.length; n++)
                                 completionGroups.push(globals[n]);
                         } else {
                             completionGroups.push(globals);
@@ -1111,8 +1153,8 @@ function complete(line, callback) {
                         }
                         // works for non-objects
                         try {
-                            var sentinel = 5;
-                            var p;
+                            let sentinel = 5;
+                            let p;
                             if (typeof obj === 'object' || typeof obj === 'function') {
                                 p = Object.getPrototypeOf(obj);
                             } else {
@@ -1155,7 +1197,7 @@ function complete(line, callback) {
     function completionGroupsLoaded() {
         // Filter, sort (within each group), uniq and merge the completion groups.
         if (completionGroups.length && filter) {
-            var newCompletionGroups = [];
+            const newCompletionGroups = [];
             for (i = 0; i < completionGroups.length; i++) {
                 group = completionGroups[i]
                     .filter((elem) => elem.indexOf(filter) === 0);
@@ -1167,7 +1209,7 @@ function complete(line, callback) {
         }
 
         if (completionGroups.length) {
-            var uniq = {};  // Unique completions across all groups
+            const uniq = {};  // Unique completions across all groups
             completions = [];
             // Completion group 0 is the "closest"
             // (least far up the inheritance chain)
@@ -1175,7 +1217,7 @@ function complete(line, callback) {
             for (i = 0; i < completionGroups.length; i++) {
                 group = completionGroups[i];
                 group.sort();
-                for (var j = group.length - 1; j >= 0; j--) {
+                for (let j = group.length - 1; j >= 0; j--) {
                     c = group[j];
                     if (!hasOwnProperty(uniq, c)) {
                         completions.unshift(c);
@@ -1200,9 +1242,9 @@ function longestCommonPrefix(arr = []) {
 
     const first = arr[0];
     // complexity: O(m * n)
-    for (var m = 0; m < first.length; m++) {
+    for (let m = 0; m < first.length; m++) {
         const c = first[m];
-        for (var n = 1; n < cnt; n++) {
+        for (let n = 1; n < cnt; n++) {
             const entry = arr[n];
             if (m >= entry.length || c !== entry[m]) {
                 return first.substring(0, m);
@@ -1211,30 +1253,6 @@ function longestCommonPrefix(arr = []) {
     }
     return first;
 }
-
-REPLServer.prototype.completeOnEditorMode = (callback) => (err, results) => {
-    if (err) return callback(err);
-
-    const [completions, completeOn = ''] = results;
-    const prefixLength = completeOn.length;
-
-    if (prefixLength === 0) return callback(null, [[], completeOn]);
-
-    const isNotEmpty = (v) => v.length > 0;
-    const trimCompleteOnPrefix = (v) => v.substring(prefixLength);
-    const data = completions.filter(isNotEmpty).map(trimCompleteOnPrefix);
-
-    callback(null, [[`${completeOn}${longestCommonPrefix(data)}`], completeOn]);
-};
-
-REPLServer.prototype.defineCommand = function (keyword, cmd) {
-    if (typeof cmd === 'function') {
-        cmd = { action: cmd };
-    } else if (typeof cmd.action !== 'function') {
-        throw new ERR_INVALID_ARG_TYPE('action', 'Function', cmd.action);
-    }
-    this.commands[keyword] = cmd;
-};
 
 REPLServer.prototype.memory = util.deprecate(
     _memory,
@@ -1262,11 +1280,11 @@ function _memory(cmd) {
     if (cmd) {
         // Going down is { and (   e.g. function() {
         // going up is } and )
-        var dw = cmd.match(/{|\(/g);
-        var up = cmd.match(/}|\)/g);
+        let dw = cmd.match(/{|\(/g);
+        let up = cmd.match(/}|\)/g);
         up = up ? up.length : 0;
         dw = dw ? dw.length : 0;
-        var depth = dw - up;
+        let depth = dw - up;
 
         if (depth) {
             (function workIt() {
@@ -1280,14 +1298,14 @@ function _memory(cmd) {
                     // scope will not work for this function.
                     self.lines.level.push({
                         line: self.lines.length - 1,
-                        depth: depth,
+                        depth,
                         isFunction: /\bfunction\b/.test(cmd)
                     });
                 } else if (depth < 0) {
                     // Going... up.
-                    var curr = self.lines.level.pop();
+                    const curr = self.lines.level.pop();
                     if (curr) {
-                        var tmp = curr.depth + depth;
+                        const tmp = curr.depth + depth;
                         if (tmp < 0) {
                             // More to go, recurse
                             depth += curr.depth;
@@ -1344,13 +1362,13 @@ function _turnOffEditorMode(repl) {
 function defineDefaultCommands(repl) {
     repl.defineCommand('break', {
         help: 'Sometimes you get stuck, this gets you out',
-        action: function () {
+        action() {
             this.clearBufferedCommand();
             this.displayPrompt();
         }
     });
 
-    var clearMessage;
+    let clearMessage;
     if (repl.useGlobal) {
         clearMessage = 'Alias for .break';
     } else {
@@ -1358,7 +1376,7 @@ function defineDefaultCommands(repl) {
     }
     repl.defineCommand('clear', {
         help: clearMessage,
-        action: function () {
+        action() {
             this.clearBufferedCommand();
             if (!this.useGlobal) {
                 this.outputStream.write('Clearing context...\n');
@@ -1370,33 +1388,34 @@ function defineDefaultCommands(repl) {
 
     repl.defineCommand('exit', {
         help: 'Exit the repl',
-        action: function () {
+        action() {
             this.close();
         }
     });
 
     repl.defineCommand('help', {
         help: 'Print this help message',
-        action: function () {
+        action() {
             const names = Object.keys(this.commands).sort();
             const longestNameLength = names.reduce(
                 (max, name) => Math.max(max, name.length),
                 0
             );
-            for (var n = 0; n < names.length; n++) {
-                var name = names[n];
-                var cmd = this.commands[name];
-                var spaces = ' '.repeat(longestNameLength - name.length + 3);
-                var line = `.${name}${cmd.help ? spaces + cmd.help : ''}\n`;
+
+            for (const name of names) {
+                const cmd = this.commands[name];
+                const spaces = ' '.repeat(longestNameLength - name.length + 3);
+                const line = `.${name}${cmd.help ? spaces + cmd.help : ''}\n`;
                 this.outputStream.write(line);
             }
+
             this.displayPrompt();
         }
     });
 
     repl.defineCommand('save', {
         help: 'Save all evaluated commands in this REPL session to a file',
-        action: function (file) {
+        action(file) {
             try {
                 fs.writeFileSync(file, this.lines.join('\n') + '\n');
                 this.outputStream.write('Session saved to: ' + file + '\n');
@@ -1409,14 +1428,14 @@ function defineDefaultCommands(repl) {
 
     repl.defineCommand('load', {
         help: 'Load JS from a file into the REPL session',
-        action: function (file) {
+        action(file) {
             try {
-                var stats = fs.statSync(file);
+                const stats = fs.statSync(file);
                 if (stats && stats.isFile()) {
                     _turnOnEditorMode(this);
-                    var data = fs.readFileSync(file, 'utf8');
-                    var lines = data.split('\n');
-                    for (var n = 0; n < lines.length; n++) {
+                    const data = fs.readFileSync(file, 'utf8');
+                    const lines = data.split('\n');
+                    for (let n = 0; n < lines.length; n++) {
                         if (lines[n])
                             this.write(`${lines[n]}\n`);
                     }

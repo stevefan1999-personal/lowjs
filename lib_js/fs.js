@@ -94,6 +94,7 @@ class Stats {
     static S_IFIFO = parseInt('0010000', 8)
     static S_IFLNK = parseInt('0120000', 8)
     static S_IFSOCK = parseInt('0140000', 8)
+    //$
 
     constructor(stat) { Object.assign(this, stat) }
     get fileType() { return this.mode & Stats.S_IFMT }
@@ -108,6 +109,7 @@ class Stats {
     isSymbolicLink = () => this.fileType == Stats.S_IFLNK
     isFIFO = () => this.fileType == Stats.S_IFIFO
     isSocket = () => this.fileType == Stats.S_IFSOCK
+    //$
 }
 
 exports.Stats = Stats;
@@ -117,7 +119,8 @@ exports.stat = (path, cb) => native.stat(path, (err, stat) => cb(err, new Stats(
 exports.statSync = (path, cb) => new Stats(native.statSync(path));
 
 exports.readSync = (fd, buffer, offset, length, position) => {
-    let resErr, resBytesRead;
+    let resErr;
+    let resBytesRead;
     function res(err, bytesRead) {
         resErr = err;
         resBytesRead = bytesRead;
@@ -141,7 +144,8 @@ exports.readSync = (fd, buffer, offset, length, position) => {
 };
 
 exports.writeSync = (fd, buffer, offset, length, position) => {
-    let resErr, resBytesWritten;
+    let resErr;
+    let resBytesWritten;
     function res(err, bytesWritten) {
         resErr = err;
         resBytesWritten = bytesWritten;
@@ -165,7 +169,8 @@ exports.writeSync = (fd, buffer, offset, length, position) => {
 };
 
 exports.fstatSync = (fd) => {
-    let resErr, resStat;
+    let resErr;
+    let resStat;
     exports.fstat(fd, (err, stat) => {
         resErr = err;
         resStat = stat;
@@ -435,9 +440,7 @@ class ReadStream extends stream.Readable {
 }
 
 exports.ReadStream = ReadStream;
-exports.createReadStream = (path, options) => {
-    return new ReadStream(path, options);
-}
+exports.createReadStream = (path, options) => new ReadStream(path, options)
 
 class WriteStream extends stream.Writable {
     constructor(path, options) {
@@ -550,9 +553,7 @@ class WriteStream extends stream.Writable {
 }
 
 exports.WriteStream = WriteStream;
-exports.createWriteStream = (path, options) => {
-    return new WriteStream(path, options);
-}
+exports.createWriteStream = (path, options) => new WriteStream(path, options)
 
 exports.constants = {
     S_IFIFO: 4096,

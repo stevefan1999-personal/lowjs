@@ -108,6 +108,8 @@ class IncomingMessage extends stream.Readable {
     // event "aborted"
     aborted = false;
 
+    //$
+
     constructor() {
         super({
             read(size) {
@@ -180,7 +182,8 @@ class IncomingMessage extends stream.Readable {
         });
     }
 
-    setTimeout(msecs, callback) { }
+    setTimeout(msecs, callback) {
+    }
 }
 
 class ServerResponse extends stream.Writable {
@@ -191,6 +194,8 @@ class ServerResponse extends stream.Writable {
 
     _httpHeadersLowerCase = {};
     _httpHeadersLower2Name = {};
+
+    //$
 
     constructor() {
         super({
@@ -306,10 +311,17 @@ class ServerResponse extends stream.Writable {
         return this._httpHeadersLowerCase;
     }
 
-    addTrailers(headers) { }
-    getHeaderNames() { }
-    setTimeout(msecs, callback) { }
-    writeContinue() { }
+    addTrailers(headers) {
+    }
+
+    getHeaderNames() {
+    }
+
+    setTimeout(msecs, callback) {
+    }
+
+    writeContinue() {
+    }
 
     writeHead(statusCode, statusMessage, headers) {
         if (this.headersSent)
@@ -330,10 +342,29 @@ class ServerResponse extends stream.Writable {
         }
     }
 
-    writeProcessing() { }
+    writeProcessing() {
+    }
 }
 
-const discard2Headers = { 'age': 1, 'authorization': 1, 'content-length': 1, 'content-type': 1, 'etag': 1, 'expires': 1, 'from': 1, 'host': 1, 'if-modified-since': 1, 'if-unmodified-since': 1, 'last-modified': 1, 'location': 1, 'max-forwards': 1, 'proxy-authorization': 1, 'referer': 1, 'retry-after': 1, 'user-agent': 1 };
+const discard2Headers = {
+    'age': 1,
+    'authorization': 1,
+    'content-length': 1,
+    'content-type': 1,
+    'etag': 1,
+    'expires': 1,
+    'from': 1,
+    'host': 1,
+    'if-modified-since': 1,
+    'if-unmodified-since': 1,
+    'last-modified': 1,
+    'location': 1,
+    'max-forwards': 1,
+    'proxy-authorization': 1,
+    'referer': 1,
+    'retry-after': 1,
+    'user-agent': 1
+};
 
 function handleServerConn(server, socket) {
     if (socket._socketReading)
@@ -346,6 +377,7 @@ function handleServerConn(server, socket) {
     socket._socketHTTPWrapped = true;
 
     let inError = false;
+
     function handleError(err) {
         socket._socketHTTPWrapped = false;
         if (inError) {
@@ -357,6 +389,7 @@ function handleServerConn(server, socket) {
         if (!server.emit('clientError', err, socket))
             socket.end('HTTP/1.1 400 Bad Request\r\n\r\n');
     }
+
     socket.on('error', handleError);
 
     native.httpGetRequest(socket._socketFD, (error, data, bytesRead) => {
