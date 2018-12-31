@@ -22,7 +22,7 @@ LowHTTPDirect::LowHTTPDirect(low_main_t *low, bool isServer) : LowLoopCallback(l
                                                                mRemainingRead(NULL), mReadError(false),
                                                                mWriteError(false), mHTTPError(false)
 {
-    pthread_mutex_init(&mMutex, NULL);
+    mtx_init(&mMutex, 0);
     Init();
 }
 
@@ -65,7 +65,7 @@ LowHTTPDirect::~LowHTTPDirect()
         }
     }
 
-    pthread_mutex_destroy(&mMutex);
+    mtx_destroy(&mMutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -170,14 +170,14 @@ void LowHTTPDirect::Read(unsigned char *data, int len, int callIndex)
         return;
     }
 
-    pthread_mutex_lock(&mMutex);
+    mtx_lock(&mMutex);
     mReadPos = 0;
     mReadLen = len;
     mReadData = data;
 
     if (mRemainingRead && !mClosed)
     {
-        pthread_mutex_unlock(&mMutex);
+        mtx_unlock(&mMutex);
 
         unsigned char *data = mRemainingRead;
         mRemainingRead = NULL;
@@ -188,7 +188,7 @@ void LowHTTPDirect::Read(unsigned char *data, int len, int callIndex)
     }
     else
     {
-        pthread_mutex_unlock(&mMutex);
+        mtx_unlock(&mMutex);
     }
 
     if (mReadPos || mPhase == LOWHTTPDIRECT_PHASE_SENDING_RESPONSE || mClosed || mReadError || mHTTPError)
@@ -218,10 +218,10 @@ void LowHTTPDirect::Read(unsigned char *data, int len, int callIndex)
             mReadData = NULL;
             duk_push_int(mLow->duk_ctx, mReadPos);
 
-            pthread_mutex_lock(&mLow->ref_mutex);
+            mtx_lock(&mLow->ref_mutex);
             int read = mBytesRead;
             mBytesRead = 0;
-            pthread_mutex_unlock(&mLow->ref_mutex);
+            mtx_unlock(&mLow->ref_mutex);
 
             duk_push_int(mLow->duk_ctx, read);
 
@@ -232,14 +232,14 @@ void LowHTTPDirect::Read(unsigned char *data, int len, int callIndex)
 
                 while (mParamFirst)
                 {
-                    pthread_mutex_lock(&mMutex);
+                    mtx_lock(&mMutex);
                     LowHTTPDirect_ParamData *param = mParamFirst;
                     mParamFirst = mParamFirst->next;
                     if (!mParamFirst)
                     {
                         mParamLast = NULL;
                     }
-                    pthread_mutex_unlock(&mMutex);
+                    mtx_unlock(&mMutex);
 
                     int pos = 0;
                     while (param->data[pos])
@@ -293,7 +293,7 @@ void LowHTTPDirect::WriteHeaders(const char *txt, int index, int len, bool isChu
         return;
     }
 
-    pthread_mutex_lock(&mMutex);
+    mtx_lock(&mMutex);
     mWriting = true;
     mWritePos = 0;
     mWriteLen = len;
@@ -309,7 +309,7 @@ void LowHTTPDirect::WriteHeaders(const char *txt, int index, int len, bool isChu
     mWriteBufferCount = 1;
 
     DoWrite();
-    pthread_mutex_unlock(&mMutex);
+    mtx_unlock(&mMutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -326,7 +326,7 @@ void LowHTTPDirect::Write(unsigned char *data, int len, int bufferIndex, int cal
         return;
     }
 
-    pthread_mutex_lock(&mMutex);
+    mtx_lock(&mMutex);
     if (len == 0)
     {
         mWriteDone = true;
@@ -359,7 +359,7 @@ void LowHTTPDirect::Write(unsigned char *data, int len, int bufferIndex, int cal
     }
 
     DoWrite();
-    pthread_mutex_unlock(&mMutex);
+    mtx_unlock(&mMutex);
 
     if (!mWriteBufferCount || mWriteError)
     {
@@ -500,14 +500,14 @@ bool LowHTTPDirect::OnLoop()
 
             while (mParamFirst && mParamFirst->type == LOWHTTPDIRECT_PARAMDATA_HEADER)
             {
-                pthread_mutex_lock(&mMutex);
+                mtx_lock(&mMutex);
                 LowHTTPDirect_ParamData *param = mParamFirst;
                 mParamFirst = mParamFirst->next;
                 if (!mParamFirst)
                 {
                     mParamLast = NULL;
                 }
-                pthread_mutex_unlock(&mMutex);
+                mtx_unlock(&mMutex);
 
                 int pos = 0;
                 while (param->data[pos])
@@ -526,10 +526,10 @@ bool LowHTTPDirect::OnLoop()
                 low_free(param);
             }
 
-            pthread_mutex_lock(&mLow->ref_mutex);
+            mtx_lock(&mLow->ref_mutex);
             int read = mBytesRead;
             mBytesRead = 0;
-            pthread_mutex_unlock(&mLow->ref_mutex);
+            mtx_unlock(&mLow->ref_mutex);
             duk_push_int(mLow->duk_ctx, read);
 
             mIsRequest = true;
@@ -539,7 +539,7 @@ bool LowHTTPDirect::OnLoop()
 
     if (mReadCallID && (mReadPos || mPhase == LOWHTTPDIRECT_PHASE_SENDING_RESPONSE || mClosed))
     {
-        pthread_mutex_lock(&mMutex);
+        mtx_lock(&mMutex);
 
         int callID = mReadCallID;
         mReadCallID = 0;
@@ -559,7 +559,7 @@ bool LowHTTPDirect::OnLoop()
                 duk_put_prop_string(mLow->duk_ctx, -2, "code");
             }
             mReadError = mHTTPError = false;
-            pthread_mutex_unlock(&mMutex);
+            mtx_unlock(&mMutex);
 
             Detach();
             duk_call(mLow->duk_ctx, 1);
@@ -570,12 +570,12 @@ bool LowHTTPDirect::OnLoop()
 
             duk_push_null(mLow->duk_ctx);
             duk_push_int(mLow->duk_ctx, mReadPos);
-            pthread_mutex_unlock(&mMutex);
+            mtx_unlock(&mMutex);
 
-            pthread_mutex_lock(&mLow->ref_mutex);
+            mtx_lock(&mLow->ref_mutex);
             int read = mBytesRead;
             mBytesRead = 0;
-            pthread_mutex_unlock(&mLow->ref_mutex);
+            mtx_unlock(&mLow->ref_mutex);
             duk_push_int(mLow->duk_ctx, read);
 
             if (!mReadPos)
@@ -585,14 +585,14 @@ bool LowHTTPDirect::OnLoop()
 
                 while (mParamFirst)
                 {
-                    pthread_mutex_lock(&mMutex);
+                    mtx_lock(&mMutex);
                     LowHTTPDirect_ParamData *param = mParamFirst;
                     mParamFirst = mParamFirst->next;
                     if (!mParamFirst)
                     {
                         mParamLast = NULL;
                     }
-                    pthread_mutex_unlock(&mMutex);
+                    mtx_unlock(&mMutex);
 
                     int pos = 0;
                     while (param->data[pos])
@@ -739,7 +739,7 @@ bool LowHTTPDirect::SocketData(unsigned char *data, int len, bool inLoop)
             }
             newParam->next = NULL;
             newParam->type = mAtTrailer ? LOWHTTPDIRECT_PARAMDATA_TRAILER : LOWHTTPDIRECT_PARAMDATA_HEADER;
-            pthread_mutex_lock(&mMutex);
+            mtx_lock(&mMutex);
             if (param)
             {
                 if (mParamStart == 1)
@@ -762,7 +762,7 @@ bool LowHTTPDirect::SocketData(unsigned char *data, int len, bool inLoop)
                 mParamFirst = mParamLast = newParam;
                 mParamPos = mParamPosNonSpace = mParamStart = 1;
             }
-            pthread_mutex_unlock(&mMutex);
+            mtx_unlock(&mMutex);
 
             param = newParam;
         }
@@ -816,12 +816,12 @@ bool LowHTTPDirect::SocketData(unsigned char *data, int len, bool inLoop)
                 size = mContentLen - mDataLen;
             }
 
-            pthread_mutex_lock(&mMutex);
+            mtx_lock(&mMutex);
             if (!mReadData || mReadPos == mReadLen)
             {
                 mRemainingReadLen = len;
                 mRemainingRead = data;
-                pthread_mutex_unlock(&mMutex);
+                mtx_unlock(&mMutex);
                 break;
             }
             if (size > mReadLen - mReadPos)
@@ -831,7 +831,7 @@ bool LowHTTPDirect::SocketData(unsigned char *data, int len, bool inLoop)
 
             memcpy(mReadData + mReadPos, data, size);
             mReadPos += size;
-            pthread_mutex_unlock(&mMutex);
+            mtx_unlock(&mMutex);
 
             mDataLen += size;
             data += size;
@@ -1029,9 +1029,9 @@ bool LowHTTPDirect::SocketData(unsigned char *data, int len, bool inLoop)
         }
     }
 
-    pthread_mutex_lock(&mLow->ref_mutex);
+    mtx_lock(&mLow->ref_mutex);
     mBytesRead += len;
-    pthread_mutex_unlock(&mLow->ref_mutex);
+    mtx_unlock(&mLow->ref_mutex);
     if (mRequestCallID && setCallback && !inLoop)
     {
         low_loop_set_callback(mLow, this);
@@ -1056,14 +1056,14 @@ done:
 
 bool LowHTTPDirect::OnSocketWrite()
 {
-    pthread_mutex_lock(&mMutex);
+    mtx_lock(&mMutex);
     DoWrite();
     if (mWriteCallID && (!mWriteBufferCount || mWriteError))
     {
         low_loop_set_callback(mLow, this);
     }
     bool res = mWriteBufferCount != 0;
-    pthread_mutex_unlock(&mMutex);
+    mtx_unlock(&mMutex);
 
     return res;
 }

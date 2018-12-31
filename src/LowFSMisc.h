@@ -11,7 +11,7 @@
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
-#include <pthread.h>
+#include <threads.h>
 
 struct low_main_t;
 
@@ -67,7 +67,7 @@ private:
   int mMode;
 
   int mCallID;
-  pthread_mutex_t mMutex;
+  mtx_t mMutex;
 
   int mPhase, mError;
   char *mFileEntries;

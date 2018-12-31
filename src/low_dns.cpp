@@ -12,7 +12,9 @@
 #include "low_config.h"
 
 #if LOW_INCLUDE_CARES_RESOLVER
+
 #include "LowDNSResolver.h"
+
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
 #include <errno.h>
@@ -84,10 +86,10 @@ duk_ret_t low_dns_new_resolver(duk_context *ctx)
     low_main_t *low = duk_get_low_context(ctx);
 
     LowDNSResolver *resolver = new(low_new) LowDNSResolver(low);
-    if(!resolver)
+    if (!resolver)
         duk_generic_error(ctx, "out of memory");
 
-    if(!resolver->Init())
+    if (!resolver->Init())
     {
         delete resolver;
         duk_throw(ctx);
@@ -113,12 +115,12 @@ duk_ret_t low_dns_resolver_cancel(duk_context *ctx)
     low_main_t *low = duk_get_low_context(ctx);
     int index = duk_require_int(ctx, 0);
 
-    if(index < 0 || index >= low->resolvers.size())
+    if (index < 0 || index >= low->resolvers.size())
         duk_reference_error(ctx, "resolver not found");
 
-    pthread_mutex_lock(&low->resolvers_mutex);
+    mtx_lock(&low->resolvers_mutex);
     low->resolvers[index]->Cancel();
-    pthread_mutex_unlock(&low->resolvers_mutex);
+    mtx_unlock(&low->resolvers_mutex);
 #else
     duk_reference_error(ctx, "low.js was compiled without c-ares. Recompile or "
                              "use dns.lookup instead.");
@@ -136,17 +138,17 @@ duk_ret_t low_dns_resolver_get_servers(duk_context *ctx)
     low_main_t *low = duk_get_low_context(ctx);
     int index = duk_require_int(ctx, 0);
 
-    if(index < 0 || index >= low->resolvers.size())
+    if (index < 0 || index >= low->resolvers.size())
         duk_reference_error(ctx, "resolver not found");
 
     struct ares_addr_port_node *list, *info;
     int err;
 
-    pthread_mutex_lock(&low->resolvers_mutex);
+    mtx_lock(&low->resolvers_mutex);
     list = low->resolvers[index]->GetServers(err);
-    pthread_mutex_unlock(&low->resolvers_mutex);
+    mtx_unlock(&low->resolvers_mutex);
 
-    if(err)
+    if (err)
     {
         low_push_error(low, err, "ares_get_servers_ports");
         duk_throw(ctx);
@@ -156,20 +158,17 @@ duk_ret_t low_dns_resolver_get_servers(duk_context *ctx)
     int arr_len = 0;
 
     info = list;
-    while(info)
+    while (info)
     {
         char host[80] = "[";
-        if((info->family == AF_INET || info->family == AF_INET6) &&
-           inet_ntop(info->family,
-                     info->family == AF_INET ? (void *)&info->addr.addr4
-                                             : (void *)&info->addr.addr6,
-                     host + 1,
-                     64) != NULL)
+        if ((info->family == AF_INET || info->family == AF_INET6) &&
+            inet_ntop(info->family, info->family == AF_INET ? (void *) &info->addr.addr4 : (void *) &info->addr.addr6,
+                      host + 1, 64) != NULL)
         {
             int len = strlen(host);
-            if(info->udp_port && info->udp_port != 53)
+            if (info->udp_port && info->udp_port != 53)
             {
-                if(info->family == AF_INET)
+                if (info->family == AF_INET)
                 {
                     sprintf(host + len, ":%d", info->udp_port);
                     duk_push_string(ctx, host + 1);
@@ -181,15 +180,16 @@ duk_ret_t low_dns_resolver_get_servers(duk_context *ctx)
                 }
             }
             else
+            {
                 duk_push_string(ctx, host + 1);
+            }
             duk_put_prop_index(ctx, -2, arr_len++);
 
-            if(info->tcp_port && info->udp_port &&
-               info->tcp_port != info->udp_port)
+            if (info->tcp_port && info->udp_port && info->tcp_port != info->udp_port)
             {
-                if(info->udp_port && info->udp_port != 53)
+                if (info->udp_port && info->udp_port != 53)
                 {
-                    if(info->family == AF_INET)
+                    if (info->family == AF_INET)
                     {
                         sprintf(host + len, ":%d", info->udp_port);
                         duk_push_string(ctx, host + 1);
@@ -229,14 +229,14 @@ duk_ret_t low_dns_resolver_set_servers(duk_context *ctx)
     low_main_t *low = duk_get_low_context(ctx);
     int index = duk_require_int(ctx, 0);
 
-    if(index < 0 || index >= low->resolvers.size())
+    if (index < 0 || index >= low->resolvers.size())
         duk_reference_error(ctx, "resolver not found");
 
     struct ares_addr_port_node *list = NULL, *info, *next;
     int i, n;
 
     n = duk_get_length(ctx, 1);
-    for(i = 0; i < n; i++)
+    for (i = 0; i < n; i++)
     {
         duk_get_prop_index(ctx, 1, i);
         duk_get_prop_index(ctx, -1, 0);
@@ -248,21 +248,27 @@ duk_ret_t low_dns_resolver_set_servers(duk_context *ctx)
         duk_get_prop_index(ctx, -1, 1);
         const char *ip = duk_get_string(ctx, -1);
 
-        next = (ares_addr_port_node *)low_alloc(sizeof(ares_addr_port_node));
-        if(!list)
+        next = (ares_addr_port_node *) low_alloc(sizeof(ares_addr_port_node));
+        if (!list)
+        {
             list = next;
+        }
         else
+        {
             info->next = next;
+        }
         info = next;
         info->next = NULL;
 
-        if(family == 4)
+        if (family == 4)
         {
             info->family = AF_INET;
-            if(inet_pton(AF_INET, ip, &info->addr.addr4) != 1)
+            if (inet_pton(AF_INET, ip, &info->addr.addr4) != 1)
             {
-                if(list)
+                if (list)
+                {
                     ares_free_data(list);
+                }
                 low_push_error(low, errno, "inet_pton");
                 duk_throw(ctx);
             }
@@ -270,10 +276,12 @@ duk_ret_t low_dns_resolver_set_servers(duk_context *ctx)
         else
         {
             info->family = AF_INET6;
-            if(inet_pton(AF_INET6, ip, &info->addr.addr6) != 1)
+            if (inet_pton(AF_INET6, ip, &info->addr.addr6) != 1)
             {
-                if(list)
+                if (list)
+                {
                     ares_free_data(list);
+                }
                 low_push_error(low, errno, "inet_pton");
                 duk_throw(ctx);
             }
@@ -283,10 +291,10 @@ duk_ret_t low_dns_resolver_set_servers(duk_context *ctx)
         duk_pop_2(ctx);
     }
 
-    pthread_mutex_lock(&low->resolvers_mutex);
+    mtx_lock(&low->resolvers_mutex);
     int err = low->resolvers[index]->SetServers(list);
-    pthread_mutex_unlock(&low->resolvers_mutex);
-    if(err)
+    mtx_unlock(&low->resolvers_mutex);
+    if (err)
     {
         low_push_error(low, err, "ares_set_servers_ports");
         duk_throw(ctx);
@@ -310,19 +318,18 @@ duk_ret_t low_dns_resolver_resolve(duk_context *ctx)
     duk_get_prop_string(ctx, 0, "_handle");
     int index = duk_require_int(ctx, -1);
 
-    if(index < 0 || index >= low->resolvers.size())
+    if (index < 0 || index >= low->resolvers.size())
         duk_reference_error(ctx, "resolver not found");
 
     const char *hostname = duk_require_string(ctx, 1);
     const char *type = duk_require_string(ctx, 2);
     bool ttl = duk_require_boolean(ctx, 3);
 
-    pthread_mutex_lock(&low->resolvers_mutex);
-    LowDNSResolver_Query *query =
-      new(low_new) LowDNSResolver_Query(low->resolvers[index]);
-    if(!query)
+    mtx_lock(&low->resolvers_mutex);
+    LowDNSResolver_Query *query = new(low_new) LowDNSResolver_Query(low->resolvers[index]);
+    if (!query)
     {
-        pthread_mutex_unlock(&low->resolvers_mutex);
+        mtx_unlock(&low->resolvers_mutex);
 
         duk_dup(ctx, 4);
         low_push_error(low, ENOMEM, "malloc");
@@ -331,7 +338,7 @@ duk_ret_t low_dns_resolver_resolve(duk_context *ctx)
     }
 
     query->Resolve(hostname, type, ttl, 0, 4);
-    pthread_mutex_unlock(&low->resolvers_mutex);
+    mtx_unlock(&low->resolvers_mutex);
 #else
     duk_reference_error(ctx, "low.js was compiled without c-ares. Recompile or "
                              "use dns.lookup instead.");
@@ -351,17 +358,16 @@ duk_ret_t low_dns_resolver_gethostbyaddr(duk_context *ctx)
     duk_get_prop_string(ctx, 0, "_handle");
     int index = duk_require_int(ctx, -1);
 
-    if(index < 0 || index >= low->resolvers.size())
+    if (index < 0 || index >= low->resolvers.size())
         duk_reference_error(ctx, "resolver not found");
 
     const char *hostname = duk_require_string(ctx, 1);
 
-    pthread_mutex_lock(&low->resolvers_mutex);
-    LowDNSResolver_GetHostByAddr *query =
-      new(low_new) LowDNSResolver_GetHostByAddr(low->resolvers[index]);
-    if(!query)
+    mtx_lock(&low->resolvers_mutex);
+    LowDNSResolver_GetHostByAddr *query = new(low_new) LowDNSResolver_GetHostByAddr(low->resolvers[index]);
+    if (!query)
     {
-        pthread_mutex_unlock(&low->resolvers_mutex);
+        mtx_unlock(&low->resolvers_mutex);
 
         duk_dup(ctx, 2);
         low_push_error(low, ENOMEM, "malloc");
@@ -370,8 +376,8 @@ duk_ret_t low_dns_resolver_gethostbyaddr(duk_context *ctx)
     }
 
     int error = query->Resolve(hostname, 0, 2);
-    pthread_mutex_unlock(&low->resolvers_mutex);
-    if(error)
+    mtx_unlock(&low->resolvers_mutex);
+    if (error)
     {
         duk_dup(ctx, 2);
         low_push_error(low, error, "inet_pton");
@@ -397,12 +403,12 @@ duk_ret_t low_dns_resolver_finalizer(duk_context *ctx)
 
     duk_get_prop_string(ctx, 0, "_handle");
     int index = duk_require_int(ctx, -1);
-    if(index < 0 || index >= low->resolvers.size())
+    if (index < 0 || index >= low->resolvers.size())
         duk_reference_error(ctx, "resolver not found");
 
-    pthread_mutex_lock(&low->resolvers_mutex);
+    mtx_lock(&low->resolvers_mutex);
     delete low->resolvers[index];
-    pthread_mutex_unlock(&low->resolvers_mutex);
+    mtx_unlock(&low->resolvers_mutex);
 
     return 0;
 }

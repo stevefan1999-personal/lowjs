@@ -20,7 +20,7 @@ void *low_data_thread_main(void *arg)
     {
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
 
-    pthread_mutex_lock(&low->data_thread_mutex);
+    mtx_lock(&low->data_thread_mutex);
     while (true)
     {
 start:
@@ -42,19 +42,19 @@ start:
                 }
                 callback->mNext = NULL;
 
-                pthread_mutex_unlock(&low->data_thread_mutex);
+                mtx_unlock(&low->data_thread_mutex);
 
                 if (!callback->OnData())
                 {
-                    pthread_mutex_lock(&low->data_thread_mutex);
+                    mtx_lock(&low->data_thread_mutex);
                     low->data_thread_done = true;
-                    pthread_cond_broadcast(&low->data_thread_done_cond);
-                    pthread_mutex_unlock(&low->data_thread_mutex);
+                    cnd_broadcast(&low->data_thread_done_cond);
+                    mtx_unlock(&low->data_thread_mutex);
 
                     delete callback;
                 }
 
-                pthread_mutex_lock(&low->data_thread_mutex);
+                mtx_lock(&low->data_thread_mutex);
                 low->data_thread_done = false;
                 goto start;
             }
@@ -65,22 +65,22 @@ start:
         }
 
         low->data_thread_done = true;
-        pthread_cond_broadcast(&low->data_thread_done_cond);
+        cnd_broadcast(&low->data_thread_done_cond);
 
-        pthread_cond_wait(&low->data_thread_cond, &low->data_thread_mutex);
+        cnd_wait(&low->data_thread_cond, &low->data_thread_mutex);
         low->data_thread_done = false;
     }
     low->data_thread_done = true;
-    pthread_cond_broadcast(&low->data_thread_done_cond);
+    cnd_broadcast(&low->data_thread_done_cond);
 
 #if LOW_ESP32_LWIP_SPECIALITIES
     while(low->destroying)
-        pthread_cond_wait(&low->data_thread_cond, &low->data_thread_mutex);
-    pthread_mutex_unlock(&low->data_thread_mutex);
+        cnd_wait(&low->data_thread_cond, &low->data_thread_mutex);
+    mtx_unlock(&low->data_thread_mutex);
 }
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
 
-    pthread_mutex_unlock(&low->data_thread_mutex);
+    mtx_unlock(&low->data_thread_mutex);
     return NULL;
 }
 
@@ -90,10 +90,10 @@ start:
 
 void low_data_set_callback(low_main_t *low, LowDataCallback *callback, int priority)
 {
-    pthread_mutex_lock(&low->data_thread_mutex);
+    mtx_lock(&low->data_thread_mutex);
     if (callback->mNext || low->data_callback_last[0] == callback || low->data_callback_last[1] == callback)
     {
-        pthread_mutex_unlock(&low->data_thread_mutex);
+        mtx_unlock(&low->data_thread_mutex);
         return;
     }
 
@@ -107,8 +107,8 @@ void low_data_set_callback(low_main_t *low, LowDataCallback *callback, int prior
     }
     low->data_callback_last[priority] = callback;
 
-    pthread_cond_broadcast(&low->data_thread_cond);
-    pthread_mutex_unlock(&low->data_thread_mutex);
+    cnd_broadcast(&low->data_thread_cond);
+    mtx_unlock(&low->data_thread_mutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -117,7 +117,7 @@ void low_data_set_callback(low_main_t *low, LowDataCallback *callback, int prior
 
 void low_data_clear_callback(low_main_t *low, LowDataCallback *callback)
 {
-    pthread_mutex_lock(&low->data_thread_mutex);
+    mtx_lock(&low->data_thread_mutex);
     if (low->data_callback_first[0] == callback)
     {
         LowDataCallback *elem = low->data_callback_first[0];
@@ -165,7 +165,7 @@ void low_data_clear_callback(low_main_t *low, LowDataCallback *callback)
 
     while (!low->data_thread_done)
     {
-        pthread_cond_wait(&low->data_thread_done_cond, &low->data_thread_mutex);
+        cnd_wait(&low->data_thread_done_cond, &low->data_thread_mutex);
     }
-    pthread_mutex_unlock(&low->data_thread_mutex);
+    mtx_unlock(&low->data_thread_mutex);
 }

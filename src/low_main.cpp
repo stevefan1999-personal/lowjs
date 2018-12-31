@@ -22,14 +22,17 @@
 #include "duktape.h"
 
 #if LOW_INCLUDE_CARES_RESOLVER
+
 #include "../deps/c-ares/ares.h"
 #include "LowDNSResolver.h"
+
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <unistd.h>
+#include <threads.h>
 
 #if LOW_ESP32_LWIP_SPECIALITIES
 #include "esp_log.h"
@@ -108,9 +111,8 @@ static void low_duk_fatal(void *udata, const char *msg)
 low_main_t *low_init()
 {
 #if LOW_INCLUDE_CARES_RESOLVER
-    int err = ares_library_init_mem(
-      ARES_LIB_INIT_ALL, low_alloc, low_free, low_realloc);
-    if(err)
+    int err = ares_library_init_mem(ARES_LIB_INIT_ALL, low_alloc, low_free, low_realloc);
+    if (err)
     {
         fprintf(stderr, "C-ares error: %s\n", ares_strerror(err));
         return NULL;
@@ -128,10 +130,10 @@ low_main_t *low_init()
         return NULL;
     }
 
-    low->web_thread = NULL;
+    low->web_thread = {};
     for (int i = 0; i < LOW_NUM_DATA_THREADS; i++)
     {
-        low->data_thread[i] = NULL;
+        low->data_thread[i] = {};
     }
 
     low->destroying = false;
@@ -161,72 +163,72 @@ low_main_t *low_init()
 
     low->last_chore_time = low_tick_count();
 
-    if (pthread_mutex_init(&low->ref_mutex, NULL) != 0)
+    if (mtx_init(&low->ref_mutex, 0) != 0)
     {
         goto err;
     }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-    if(pthread_mutex_init(&low->resolvers_mutex, NULL) != 0)
+    if (mtx_init(&low->resolvers_mutex, 0) != 0)
     {
-        pthread_mutex_destroy(&low->ref_mutex);
+        mtx_destroy(&low->ref_mutex);
         goto err;
     }
     low->resolvers_active = 0;
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
-    if (pthread_mutex_init(&low->loop_thread_mutex, NULL) != 0)
+    if (mtx_init(&low->loop_thread_mutex, 0) != 0)
     {
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
+        mtx_destroy(&low->ref_mutex);
         goto err;
     }
-    if (pthread_cond_init(&low->loop_thread_cond, NULL) != 0)
+    if (cnd_init(&low->loop_thread_cond) != 0)
     {
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
         goto err;
     }
     low->loop_callback_first = low->loop_callback_last = NULL;
 
-    if (pthread_mutex_init(&low->data_thread_mutex, NULL) != 0)
+    if (mtx_init(&low->data_thread_mutex, 0) != 0)
     {
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
 
         goto err;
     }
-    if (pthread_cond_init(&low->data_thread_cond, NULL) != 0)
+    if (cnd_init(&low->data_thread_cond) != 0)
     {
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
-        pthread_mutex_destroy(&low->data_thread_mutex);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->data_thread_mutex);
 
         goto err;
     }
-    if (pthread_cond_init(&low->data_thread_done_cond, NULL) != 0)
+    if (cnd_init(&low->data_thread_done_cond) != 0)
     {
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
-        pthread_mutex_destroy(&low->data_thread_mutex);
-        pthread_cond_destroy(&low->data_thread_cond);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->data_thread_mutex);
+        cnd_destroy(&low->data_thread_cond);
 
         goto err;
     }
@@ -248,26 +250,26 @@ low_main_t *low_init()
             fprintf(
               stderr, "failed to create data task, error code: %d\n", err);
 #else
-        if (pthread_create(&low->data_thread[i], NULL, low_data_thread_main, low) != 0)
+        if (thrd_create(&low->data_thread[i], (thrd_start_t) low_data_thread_main, low) != 0)
         {
-            pthread_mutex_lock(&low->data_thread_mutex);
+            mtx_lock(&low->data_thread_mutex);
             low->destroying = 1;
-            pthread_cond_broadcast(&low->data_thread_cond);
-            pthread_mutex_unlock(&low->data_thread_mutex);
+            cnd_broadcast(&low->data_thread_cond);
+            mtx_unlock(&low->data_thread_mutex);
             for (int j = 0; j < i; j++)
             {
-                pthread_join(low->data_thread[j], NULL);
+                thrd_join(low->data_thread[j], NULL);
             }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-            pthread_mutex_destroy(&low->resolvers_mutex);
+            mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-            pthread_mutex_destroy(&low->ref_mutex);
-            pthread_mutex_destroy(&low->loop_thread_mutex);
-            pthread_cond_destroy(&low->loop_thread_cond);
-            pthread_mutex_destroy(&low->data_thread_mutex);
-            pthread_cond_destroy(&low->data_thread_cond);
-            pthread_cond_destroy(&low->data_thread_done_cond);
+            mtx_destroy(&low->ref_mutex);
+            mtx_destroy(&low->loop_thread_mutex);
+            cnd_destroy(&low->loop_thread_cond);
+            mtx_destroy(&low->data_thread_mutex);
+            cnd_destroy(&low->data_thread_cond);
+            cnd_destroy(&low->data_thread_done_cond);
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
 
             goto err;
@@ -278,81 +280,81 @@ low_main_t *low_init()
 #if !LOW_ESP32_LWIP_SPECIALITIES
     if (pipe(low->web_thread_pipe) < 0)
     {
-        pthread_mutex_lock(&low->data_thread_mutex);
+        mtx_lock(&low->data_thread_mutex);
         low->destroying = 1;
-        pthread_cond_broadcast(&low->data_thread_cond);
-        pthread_mutex_unlock(&low->data_thread_mutex);
+        cnd_broadcast(&low->data_thread_cond);
+        mtx_unlock(&low->data_thread_mutex);
         for (int i = 0; i < LOW_NUM_DATA_THREADS; i++)
         {
-            pthread_join(low->data_thread[i], NULL);
+            thrd_join(low->data_thread[i], NULL);
         }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
-        pthread_mutex_destroy(&low->data_thread_mutex);
-        pthread_cond_destroy(&low->data_thread_cond);
-        pthread_cond_destroy(&low->data_thread_done_cond);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->data_thread_mutex);
+        cnd_destroy(&low->data_thread_cond);
+        cnd_destroy(&low->data_thread_done_cond);
 
         goto err;
     }
 #endif /* !LOW_ESP32_LWIP_SPECIALITIES */
-    if (pthread_mutex_init(&low->web_thread_mutex, NULL) != 0)
+    if (mtx_init(&low->web_thread_mutex, 0) != 0)
     {
 #if !LOW_ESP32_LWIP_SPECIALITIES
         close(low->web_thread_pipe[0]);
         close(low->web_thread_pipe[1]);
 
-        pthread_mutex_lock(&low->data_thread_mutex);
+        mtx_lock(&low->data_thread_mutex);
         low->destroying = 1;
-        pthread_cond_broadcast(&low->data_thread_cond);
-        pthread_mutex_unlock(&low->data_thread_mutex);
+        cnd_broadcast(&low->data_thread_cond);
+        mtx_unlock(&low->data_thread_mutex);
         for (int i = 0; i < LOW_NUM_DATA_THREADS; i++)
         {
-            pthread_join(low->data_thread[i], NULL);
+            thrd_join(low->data_thread[i], 0);
         }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
-        pthread_mutex_destroy(&low->data_thread_mutex);
-        pthread_cond_destroy(&low->data_thread_cond);
-        pthread_cond_destroy(&low->data_thread_done_cond);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->data_thread_mutex);
+        cnd_destroy(&low->data_thread_cond);
+        cnd_destroy(&low->data_thread_done_cond);
 #endif /* !LOW_ESP32_LWIP_SPECIALITIES */
 
         goto err;
     }
-    if (pthread_cond_init(&low->web_thread_done_cond, NULL) != 0)
+    if (cnd_init(&low->web_thread_done_cond) != 0)
     {
 #if !LOW_ESP32_LWIP_SPECIALITIES
         close(low->web_thread_pipe[0]);
         close(low->web_thread_pipe[1]);
 
-        pthread_mutex_lock(&low->data_thread_mutex);
+        mtx_lock(&low->data_thread_mutex);
         low->destroying = 1;
-        pthread_cond_broadcast(&low->data_thread_cond);
-        pthread_mutex_unlock(&low->data_thread_mutex);
+        cnd_broadcast(&low->data_thread_cond);
+        mtx_unlock(&low->data_thread_mutex);
         for (int i = 0; i < LOW_NUM_DATA_THREADS; i++)
         {
-            pthread_join(low->data_thread[i], NULL);
+            thrd_join(low->data_thread[i], 0);
         }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
-        pthread_mutex_destroy(&low->data_thread_mutex);
-        pthread_cond_destroy(&low->data_thread_cond);
-        pthread_cond_destroy(&low->data_thread_done_cond);
-        pthread_mutex_destroy(&low->web_thread_mutex);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->data_thread_mutex);
+        cnd_destroy(&low->data_thread_cond);
+        cnd_destroy(&low->data_thread_done_cond);
+        mtx_destroy(&low->web_thread_mutex);
 #endif /* !LOW_ESP32_LWIP_SPECIALITIES */
 
         goto err;
@@ -369,31 +371,31 @@ low_main_t *low_init()
     {
         fprintf(stderr, "failed to create web task, error code: %d\n", err);
 #else
-    if (pthread_create(&low->web_thread, NULL, low_web_thread_main, low) != 0)
+    if (thrd_create(&low->web_thread, (thrd_start_t) low_web_thread_main, low) != 0)
     {
         close(low->web_thread_pipe[0]);
         close(low->web_thread_pipe[1]);
 
-        pthread_mutex_lock(&low->data_thread_mutex);
+        mtx_lock(&low->data_thread_mutex);
         low->destroying = 1;
-        pthread_cond_broadcast(&low->data_thread_cond);
-        pthread_mutex_unlock(&low->data_thread_mutex);
+        cnd_broadcast(&low->data_thread_cond);
+        mtx_unlock(&low->data_thread_mutex);
         for (int i = 0; i < LOW_NUM_DATA_THREADS; i++)
         {
-            pthread_join(low->data_thread[i], NULL);
+            thrd_join(low->data_thread[i], 0);
         }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-        pthread_mutex_destroy(&low->resolvers_mutex);
+        mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        pthread_mutex_destroy(&low->ref_mutex);
-        pthread_mutex_destroy(&low->loop_thread_mutex);
-        pthread_cond_destroy(&low->loop_thread_cond);
-        pthread_mutex_destroy(&low->data_thread_mutex);
-        pthread_cond_destroy(&low->data_thread_cond);
-        pthread_cond_destroy(&low->data_thread_done_cond);
-        pthread_mutex_destroy(&low->web_thread_mutex);
-        pthread_cond_destroy(&low->web_thread_done_cond);
+        mtx_destroy(&low->ref_mutex);
+        mtx_destroy(&low->loop_thread_mutex);
+        cnd_destroy(&low->loop_thread_cond);
+        mtx_destroy(&low->data_thread_mutex);
+        cnd_destroy(&low->data_thread_cond);
+        cnd_destroy(&low->data_thread_done_cond);
+        mtx_destroy(&low->web_thread_mutex);
+        cnd_destroy(&low->web_thread_done_cond);
 #endif /* !LOW_ESP32_LWIP_SPECIALITIES */
 
         goto err;
@@ -471,16 +473,16 @@ bool low_reset(low_main_t *low)
     low_web_thread_break(low);
 
     // Finish up threads
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
     while(!low->web_thread_done)
-        pthread_cond_wait(&low->web_thread_done_cond, &low->web_thread_mutex);
-    pthread_mutex_unlock(&low->web_thread_mutex);
+        cnd_wait(&low->web_thread_done_cond, &low->web_thread_mutex);
+    mtx_unlock(&low->web_thread_mutex);
 
-    pthread_mutex_lock(&low->data_thread_mutex);
-    pthread_cond_broadcast(&low->data_thread_cond);
+    mtx_lock(&low->data_thread_mutex);
+    cnd_broadcast(&low->data_thread_cond);
     while(!low->data_thread_done)
-        pthread_cond_wait(&low->data_thread_done_cond, &low->data_thread_mutex);
-    pthread_mutex_unlock(&low->data_thread_mutex);
+        cnd_wait(&low->data_thread_done_cond, &low->data_thread_mutex);
+    mtx_unlock(&low->data_thread_mutex);
 
     bool hasOne;
     do
@@ -556,15 +558,15 @@ bool low_reset(low_main_t *low)
     low->duk_flag_stop = 0;
     low->destroying = false;
 
-    pthread_mutex_lock(&low->data_thread_mutex);
+    mtx_lock(&low->data_thread_mutex);
     low->data_thread_done = false;
-    pthread_cond_broadcast(&low->data_thread_cond);
-    pthread_mutex_unlock(&low->data_thread_mutex);
+    cnd_broadcast(&low->data_thread_cond);
+    mtx_unlock(&low->data_thread_mutex);
 
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
     low->web_thread_done = false;
-    pthread_cond_broadcast(&low->web_thread_done_cond);
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    cnd_broadcast(&low->web_thread_done_cond);
+    mtx_unlock(&low->web_thread_mutex);
 
     duk_context *new_ctx = duk_create_heap(
       low_duk_alloc, low_duk_realloc, low_duk_free, low, low_duk_fatal);
@@ -682,20 +684,20 @@ void low_destroy(low_main_t *low)
     low->destroying = true;
     low_web_thread_break(low);
 
-    pthread_join(low->web_thread, NULL);
+    thrd_join(low->web_thread, NULL);
 
-    pthread_mutex_lock(&low->web_thread_mutex);
-    pthread_cond_broadcast(&low->web_thread_done_cond);
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
+    cnd_broadcast(&low->web_thread_done_cond);
+    mtx_unlock(&low->web_thread_mutex);
 
     // Finish up data threads
-    pthread_mutex_lock(&low->data_thread_mutex);
-    pthread_cond_broadcast(&low->data_thread_cond);
-    pthread_mutex_unlock(&low->data_thread_mutex);
+    mtx_lock(&low->data_thread_mutex);
+    cnd_broadcast(&low->data_thread_cond);
+    mtx_unlock(&low->data_thread_mutex);
 
     for (int i = 0; i < LOW_NUM_DATA_THREADS; i++)
     {
-        pthread_join(low->data_thread[i], NULL);
+        thrd_join(low->data_thread[i], NULL);
     }
 
     // Then we close all FDs and delete all classes behind the callbacks
@@ -721,15 +723,15 @@ void low_destroy(low_main_t *low)
     close(low->web_thread_pipe[0]);
     close(low->web_thread_pipe[1]);
 
-    pthread_mutex_destroy(&low->data_thread_mutex);
-    pthread_cond_destroy(&low->data_thread_cond);
-    pthread_cond_destroy(&low->data_thread_done_cond);
+    mtx_destroy(&low->data_thread_mutex);
+    cnd_destroy(&low->data_thread_cond);
+    cnd_destroy(&low->data_thread_done_cond);
 
-    pthread_mutex_destroy(&low->web_thread_mutex);
-    pthread_cond_destroy(&low->web_thread_done_cond);
+    mtx_destroy(&low->web_thread_mutex);
+    cnd_destroy(&low->web_thread_done_cond);
 
-    pthread_mutex_destroy(&low->loop_thread_mutex);
-    pthread_cond_destroy(&low->loop_thread_cond);
+    mtx_destroy(&low->loop_thread_mutex);
+    cnd_destroy(&low->loop_thread_cond);
 
     if (low->duk_ctx)
     {
@@ -738,12 +740,16 @@ void low_destroy(low_main_t *low)
 
     // After finalizers.. they must not use DukTape heap!
 #if LOW_INCLUDE_CARES_RESOLVER
-    for(int i = 0; i < low->resolvers.size(); i++)
-        if(low->resolvers[i])
+    for (int i = 0; i < low->resolvers.size(); i++)
+    {
+        if (low->resolvers[i])
+        {
             delete low->resolvers[i];
+        }
+    }
     ares_library_cleanup();
 
-    pthread_mutex_destroy(&low->resolvers_mutex);
+    mtx_destroy(&low->resolvers_mutex);
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
     for (int i = 0; i < low->tlsContexts.size(); i++)
     {
@@ -760,7 +766,7 @@ void low_destroy(low_main_t *low)
         }
     } // TODO: also needed in restart?
 
-    pthread_mutex_destroy(&low->ref_mutex);
+    mtx_destroy(&low->ref_mutex);
     low_free(low);
 #endif /* !LOW_ESP32_LWIP_SPECIALITIES */
 }

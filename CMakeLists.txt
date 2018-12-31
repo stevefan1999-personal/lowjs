@@ -7,6 +7,7 @@ endif ()
 
 find_package(Threads REQUIRED)
 
+set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_STANDARD 11)
 set(DEP_DUK ${PROJECT_SOURCE_DIR}/deps/duktape)
 set(DEP_ARES ${PROJECT_SOURCE_DIR}/deps/c-ares)

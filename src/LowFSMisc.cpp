@@ -30,7 +30,7 @@
 LowFSMisc::LowFSMisc(low_main_t *low) : LowDataCallback(low), LowLoopCallback(low), mLow(low), mCallID(0),
                                         mOldName(NULL), mNewName(NULL), mFileEntries(NULL)
 {
-    pthread_mutex_init(&mMutex, NULL);
+    mtx_init(&mMutex, 0);
 }
 
 
@@ -62,7 +62,7 @@ LowFSMisc::~LowFSMisc()
         low_remove_stash(mLow, mCallID);
         mLow->run_ref--;
     }
-    pthread_mutex_destroy(&mMutex);
+    mtx_destroy(&mMutex);
 }
 
 
@@ -327,16 +327,16 @@ void LowFSMisc::Run(int callIndex)
     }
     else
     {
-        pthread_mutex_lock(&mMutex);
+        mtx_lock(&mMutex);
     }
 
     low_data_set_callback(mLow, this, LOW_DATA_THREAD_PRIORITY_MODIFY);
 
     if (!callIndex)
     {
-        pthread_mutex_lock(&mMutex);
+        mtx_lock(&mMutex);
         OnLoop();
-        pthread_mutex_unlock(&mMutex);
+        mtx_unlock(&mMutex);
     }
 }
 
@@ -495,7 +495,7 @@ bool LowFSMisc::OnData()
     }
     else
     {
-        pthread_mutex_unlock(&mMutex);
+        mtx_unlock(&mMutex);
     }
     return true;
 }

@@ -8,7 +8,7 @@
 #include "LowLoopCallback.h"
 #include "LowSocketDirect.h"
 
-#include <pthread.h>
+#include <threads.h>
 
 #include "low_config.h"
 
@@ -88,7 +88,7 @@ private:
   LowSocket *mSocket;
   int mRequestCallID, mReadCallID, mWriteCallID;
 
-  pthread_mutex_t mMutex;
+  mtx_t mMutex;
   LowHTTPDirect_Phase mPhase;
   bool mIsRequest;
   int mBytesRead;

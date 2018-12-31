@@ -10,7 +10,9 @@
 #include "LowSignalHandler.h"
 
 #if LOW_INCLUDE_CARES_RESOLVER
+
 #include "LowDNSResolver.h"
+
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
 #include "low_alloc.h"
@@ -18,7 +20,9 @@
 #include <unistd.h>
 
 #if LOW_HAS_POLL
+
 #include <poll.h>
+
 #endif /* LOW_HAS_POLL */
 
 #if LOW_ESP32_LWIP_SPECIALITIES
@@ -49,108 +53,116 @@ void *low_web_thread_main(void *arg)
     fds.push_back(poll_entry);
     lowFDs.push_back(NULL);
 
-    while(true)
+    while (true)
     {
         int timeout = -1, i;
 
 #if LOW_INCLUDE_CARES_RESOLVER
         int first_cares_fd = fds.size();
-        if(low->resolvers_active)
+        if (low->resolvers_active)
         {
-            pthread_mutex_lock(&low->resolvers_mutex);
-            for(i = 0; i < low->resolvers.size(); i++)
+            mtx_lock(&low->resolvers_mutex);
+            for (i = 0; i < low->resolvers.size(); i++)
             {
-                if(!low->resolvers[i]->IsActive())
+                if (!low->resolvers[i]->IsActive())
+                {
                     continue;
+                }
                 ares_channel &channel = low->resolvers[i]->Channel();
 
                 int sockets[16];
                 int mask = ares_getsock(channel, sockets, 16);
-                for(int j = 0; j < 16; j++)
+                for (int j = 0; j < 16; j++)
                 {
                     short events =
-                        (ARES_GETSOCK_READABLE(mask, j) ? POLLIN : 0) |
-                        (ARES_GETSOCK_WRITABLE(mask, j) ? POLLOUT : 0);
-                    if(!events)
+                        (ARES_GETSOCK_READABLE(mask, j) ? POLLIN : 0) | (ARES_GETSOCK_WRITABLE(mask, j) ? POLLOUT : 0);
+                    if (!events)
+                    {
                         break;
+                    }
 
                     pollfd fd;
                     fd.fd = sockets[j];
                     fd.events = events;
                     fds.push_back(fd);
 
-                    lowFDs.push_back((LowFD *)channel);
+                    lowFDs.push_back((LowFD *) channel);
 
                     struct timeval tv;
                     struct timeval *val = ares_timeout(channel, NULL, &tv);
-                    if(val)
+                    if (val)
                     {
-                        int millisecs =
-                            val->tv_sec * 1000 + val->tv_usec / 1000;
-                        if(timeout > millisecs || timeout == -1)
+                        int millisecs = val->tv_sec * 1000 + val->tv_usec / 1000;
+                        if (timeout > millisecs || timeout == -1)
+                        {
                             timeout = millisecs;
+                        }
                     }
                 }
             }
-            pthread_mutex_unlock(&low->resolvers_mutex);
+            mtx_unlock(&low->resolvers_mutex);
         }
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
         int count = poll(&fds[0], fds.size(), timeout);
-        if(low->destroying)
+        if (low->destroying)
+        {
             break;
+        }
 
 #if LOW_INCLUDE_CARES_RESOLVER
-        if(count == 0)
+        if (count == 0)
         {
             // Timeout
-            for(i = first_cares_fd; i < fds.size(); i++)
-                ares_process_fd((ares_channel)lowFDs[i], ARES_SOCKET_BAD,
-                                ARES_SOCKET_BAD);
+            for (i = first_cares_fd; i < fds.size(); i++)
+            {
+                ares_process_fd((ares_channel) lowFDs[i], ARES_SOCKET_BAD, ARES_SOCKET_BAD);
+            }
         }
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-        if(count > 0 && fds[0].revents)
+        if (count > 0 && fds[0].revents)
         {
             unsigned char s;
             read(fds[0].fd, &s, 1);
-            if(s != 0xFF)
+            if (s != 0xFF)
             {
-                LowSignalHandler *signal =
-                    new(low_new) LowSignalHandler(low, s);
-                if(!signal)
+                LowSignalHandler *signal = new(low_new) LowSignalHandler(low, s);
+                if (!signal)
                 {
                 } // not much we can do here !
             }
             count--;
         }
 
-        if(count > 0)
+        if (count > 0)
         {
             int firstNone = 1;
 #if LOW_INCLUDE_CARES_RESOLVER
-            for(i = 1; i < first_cares_fd; i++)
+            for (i = 1; i < first_cares_fd; i++)
 #else
-            for(i = 1; i < fds.size(); i++)
+                for(i = 1; i < fds.size(); i++)
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
             {
-                if(fds[i].fd >= 0 && fds[i].revents)
+                if (fds[i].fd >= 0 && fds[i].revents)
                 {
-                    if(!lowFDs[i]->OnEvents(fds[i].revents))
+                    if (!lowFDs[i]->OnEvents(fds[i].revents))
                     {
                         fds[i].fd = -1;
 
                         // Remove from web thread list
                         auto fd = lowFDs[i];
-                        pthread_mutex_lock(&low->web_thread_mutex);
-                        if(fd->mNextChanged || low->web_changed_last == fd)
+                        mtx_lock(&low->web_thread_mutex);
+                        if (fd->mNextChanged || low->web_changed_last == fd)
                         {
-                            if(low->web_changed_first == fd)
+                            if (low->web_changed_first == fd)
+                            {
                                 low->web_changed_first = fd->mNextChanged;
+                            }
                             else
                             {
                                 auto elem = low->web_changed_first;
-                                while(elem)
+                                while (elem)
                                 {
-                                    if(elem->mNextChanged == fd)
+                                    if (elem->mNextChanged == fd)
                                     {
                                         elem->mNextChanged = fd->mNextChanged;
                                         break;
@@ -158,12 +170,14 @@ void *low_web_thread_main(void *arg)
                                     elem = elem->mNextChanged;
                                 }
                             }
-                            if(!low->web_changed_first)
+                            if (!low->web_changed_first)
+                            {
                                 low->web_changed_last = NULL;
+                            }
                         }
                         fd->mPollIndex = -1;
                         fd->mNextChanged = NULL;
-                        pthread_mutex_unlock(&low->web_thread_mutex);
+                        mtx_unlock(&low->web_thread_mutex);
 
                         low->web_thread_notinevents = true;
                         delete fd;
@@ -171,22 +185,23 @@ void *low_web_thread_main(void *arg)
                     }
                     count--;
                 }
-                if(fds[i].fd >= 0)
+                if (fds[i].fd >= 0)
+                {
                     firstNone = i + 1;
+                }
             }
 #if LOW_INCLUDE_CARES_RESOLVER
-            for(; i < fds.size(); i++)
-                if(fds[i].revents)
+            for (; i < fds.size(); i++)
+            {
+                if (fds[i].revents)
                 {
-                    ares_process_fd(
-                        (ares_channel)lowFDs[i],
-                        (fds[i].revents & POLLIN) ? fds[i].fd : ARES_SOCKET_BAD,
-                        (fds[i].revents & POLLOUT) ? fds[i].fd
-                                                   : ARES_SOCKET_BAD);
+                    ares_process_fd((ares_channel) lowFDs[i], (fds[i].revents & POLLIN) ? fds[i].fd : ARES_SOCKET_BAD,
+                                    (fds[i].revents & POLLOUT) ? fds[i].fd : ARES_SOCKET_BAD);
                     count--;
                 }
+            }
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-            if(firstNone != fds.size())
+            if (firstNone != fds.size())
             {
                 // Effectivly also removes resolvers
                 fds.resize(firstNone);
@@ -194,56 +209,58 @@ void *low_web_thread_main(void *arg)
             }
         }
 #if LOW_INCLUDE_CARES_RESOLVER
-        else if(first_cares_fd != fds.size())
+        else if (first_cares_fd != fds.size())
         {
             fds.resize(first_cares_fd);
             lowFDs.resize(first_cares_fd);
         }
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
-        pthread_mutex_lock(&low->web_thread_mutex);
-        while(low->web_changed_first)
+        mtx_lock(&low->web_thread_mutex);
+        while (low->web_changed_first)
         {
             LowFD *fd = low->web_changed_first;
 
             low->web_changed_first = fd->mNextChanged;
-            if(!low->web_changed_first)
+            if (!low->web_changed_first)
+            {
                 low->web_changed_last = NULL;
+            }
             fd->mNextChanged = NULL;
 
-            if(fd->mMarkDelete)
+            if (fd->mMarkDelete)
             {
-                if(fd->mPollIndex != -1)
+                if (fd->mPollIndex != -1)
                 {
                     fds[fd->mPollIndex].fd = -1;
                     fd->mPollIndex = -1;
                 }
 
                 low->web_thread_notinevents = true;
-                pthread_mutex_unlock(&low->web_thread_mutex);
+                mtx_unlock(&low->web_thread_mutex);
                 delete fd;
-                pthread_mutex_lock(&low->web_thread_mutex);
+                mtx_lock(&low->web_thread_mutex);
                 low->web_thread_notinevents = false;
             }
-            else if((fd->mFD < 0 || !fd->mPollEvents) && fd->mPollIndex != -1)
+            else if ((fd->mFD < 0 || !fd->mPollEvents) && fd->mPollIndex != -1)
             {
                 fds[fd->mPollIndex].fd = -1;
                 fd->mPollIndex = -1;
             }
-            else if(fd->mFD >= 0 && fd->mPollEvents)
+            else if (fd->mFD >= 0 && fd->mPollEvents)
             {
-                if(fd->mPollIndex == -1)
+                if (fd->mPollIndex == -1)
                 {
-                    for(int i = 0; i < fds.size(); i++)
+                    for (int i = 0; i < fds.size(); i++)
                     {
-                        if(fds[i].fd == -1)
+                        if (fds[i].fd == -1)
                         {
                             fd->mPollIndex = i;
                             lowFDs[i] = fd;
                             break;
                         }
                     }
-                    if(fd->mPollIndex == -1)
+                    if (fd->mPollIndex == -1)
                     {
                         fd->mPollIndex = fds.size();
 
@@ -255,8 +272,8 @@ void *low_web_thread_main(void *arg)
                 fds[fd->mPollIndex].events = fd->mPollEvents;
             }
         }
-        pthread_cond_broadcast(&low->web_thread_done_cond);
-        pthread_mutex_unlock(&low->web_thread_mutex);
+        cnd_broadcast(&low->web_thread_done_cond);
+        mtx_unlock(&low->web_thread_mutex);
     }
 #else
     fd_set read_set, write_set;
@@ -285,7 +302,7 @@ void *low_web_thread_main(void *arg)
         bool has_cares = false;
         if(low->resolvers_active)
         {
-            pthread_mutex_lock(&low->resolvers_mutex);
+            mtx_lock(&low->resolvers_mutex);
             for(i = 0; i < low->resolvers.size(); i++)
             {
                 if(!low->resolvers[i]->IsActive())
@@ -308,7 +325,7 @@ void *low_web_thread_main(void *arg)
                     }
                 }
             }
-            pthread_mutex_unlock(&low->resolvers_mutex);
+            mtx_unlock(&low->resolvers_mutex);
         }
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
@@ -372,7 +389,7 @@ void *low_web_thread_main(void *arg)
 #if LOW_INCLUDE_CARES_RESOLVER
         if(has_cares)
         {
-            pthread_mutex_lock(&low->resolvers_mutex);
+            mtx_lock(&low->resolvers_mutex);
             for(i = 0; i < low->resolvers.size(); i++)
             {
                 if(!low->resolvers[i]->IsActive())
@@ -381,7 +398,7 @@ void *low_web_thread_main(void *arg)
 
                 ares_process(channel, &read_set1, &write_set1);
             }
-            pthread_mutex_unlock(&low->resolvers_mutex);
+            mtx_unlock(&low->resolvers_mutex);
         }
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
 
@@ -423,7 +440,7 @@ void *low_web_thread_main(void *arg)
                             }
 
                             // Remove from web thread list
-                            pthread_mutex_lock(&low->web_thread_mutex);
+                            mtx_lock(&low->web_thread_mutex);
                             if (fd->mNextChanged || low->web_changed_last == fd)
                             {
                                 if (low->web_changed_first == fd)
@@ -450,7 +467,7 @@ void *low_web_thread_main(void *arg)
                             }
                             fd->mPollIndex = -1;
                             fd->mNextChanged = NULL;
-                            pthread_mutex_unlock(&low->web_thread_mutex);
+                            mtx_unlock(&low->web_thread_mutex);
 
                             low->web_thread_notinevents = true;
                             delete fd;
@@ -470,7 +487,7 @@ void *low_web_thread_main(void *arg)
             }
         }
 
-        pthread_mutex_lock(&low->web_thread_mutex);
+        mtx_lock(&low->web_thread_mutex);
         while (low->web_changed_first)
         {
             LowFD *fd = low->web_changed_first;
@@ -494,9 +511,9 @@ void *low_web_thread_main(void *arg)
                 }
 
                 low->web_thread_notinevents = true;
-                pthread_mutex_unlock(&low->web_thread_mutex);
+                mtx_unlock(&low->web_thread_mutex);
                 delete fd;
-                pthread_mutex_lock(&low->web_thread_mutex);
+                mtx_lock(&low->web_thread_mutex);
                 low->web_thread_notinevents = false;
             }
             else if ((fd->mFD < 0 || !fd->mPollEvents) && fd->mPollIndex != -1)
@@ -547,14 +564,14 @@ void *low_web_thread_main(void *arg)
             }
         }
 
-        pthread_cond_broadcast(&low->web_thread_done_cond);
-        pthread_mutex_unlock(&low->web_thread_mutex);
+        cnd_broadcast(&low->web_thread_done_cond);
+        mtx_unlock(&low->web_thread_mutex);
     }
 
 #if LOW_ESP32_LWIP_SPECIALITIES
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
     low->web_thread_done = true;
-    pthread_cond_broadcast(&low->web_thread_done_cond);
+    cnd_broadcast(&low->web_thread_done_cond);
 
     // Remove the FDs here!
     for(int i = 0; i < fds.size(); i++)
@@ -570,18 +587,18 @@ void *low_web_thread_main(void *arg)
     }
 
     while(low->destroying)
-        pthread_cond_wait(&low->web_thread_done_cond,
+        cnd_wait(&low->web_thread_done_cond,
                           &low->web_thread_mutex);
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    mtx_unlock(&low->web_thread_mutex);
 }
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
 #endif /* LOW_HAS_POLL */
 
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
     low->web_thread_done = true;
-    pthread_cond_broadcast(&low->web_thread_done_cond);
+    cnd_broadcast(&low->web_thread_done_cond);
 
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    mtx_unlock(&low->web_thread_mutex);
     return NULL;
 }
 
@@ -605,12 +622,12 @@ void low_web_thread_break(low_main_t *low)
 
 void low_web_set_poll_events(low_main_t *low, LowFD *fd, short events)
 {
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
 
     fd->mPollEvents = events;
     if (fd->mNextChanged || low->web_changed_last == fd)
     {
-        pthread_mutex_unlock(&low->web_thread_mutex);
+        mtx_unlock(&low->web_thread_mutex);
         return;
     }
 
@@ -625,7 +642,7 @@ void low_web_set_poll_events(low_main_t *low, LowFD *fd, short events)
     low->web_changed_last = fd;
 
     low_web_thread_break(low);
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    mtx_unlock(&low->web_thread_mutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -634,15 +651,15 @@ void low_web_set_poll_events(low_main_t *low, LowFD *fd, short events)
 
 void low_web_clear_poll(low_main_t *low, LowFD *fd)
 {
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
     if (fd->mPollIndex == -1 && !fd->mNextChanged && fd != low->web_changed_last)
     {
         if (!low->web_thread_notinevents && !low->web_thread_done)   /* TODO can be even more */
         {
             low_web_thread_break(low);
-            pthread_cond_wait(&low->web_thread_done_cond, &low->web_thread_mutex);
+            cnd_wait(&low->web_thread_done_cond, &low->web_thread_mutex);
         }
-        pthread_mutex_unlock(&low->web_thread_mutex);
+        mtx_unlock(&low->web_thread_mutex);
         return;
     }
 
@@ -660,9 +677,9 @@ void low_web_clear_poll(low_main_t *low, LowFD *fd)
         low->web_changed_last = fd;
 
         low_web_thread_break(low);
-        pthread_cond_wait(&low->web_thread_done_cond, &low->web_thread_mutex);
+        cnd_wait(&low->web_thread_done_cond, &low->web_thread_mutex);
     }
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    mtx_unlock(&low->web_thread_mutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -671,12 +688,12 @@ void low_web_clear_poll(low_main_t *low, LowFD *fd)
 
 void low_web_mark_delete(low_main_t *low, LowFD *fd)
 {
-    pthread_mutex_lock(&low->web_thread_mutex);
+    mtx_lock(&low->web_thread_mutex);
 
     fd->mMarkDelete = true;
     if (fd->mNextChanged || low->web_changed_last == fd)
     {
-        pthread_mutex_unlock(&low->web_thread_mutex);
+        mtx_unlock(&low->web_thread_mutex);
         return;
     }
 
@@ -691,5 +708,5 @@ void low_web_mark_delete(low_main_t *low, LowFD *fd)
     low->web_changed_last = fd;
 
     low_web_thread_break(low);
-    pthread_mutex_unlock(&low->web_thread_mutex);
+    mtx_unlock(&low->web_thread_mutex);
 }

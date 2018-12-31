@@ -156,9 +156,9 @@ LowTLSContext::~LowTLSContext()
 
 void LowTLSContext::AddRef()
 {
-    pthread_mutex_lock(&mLow->ref_mutex);
+    mtx_lock(&mLow->ref_mutex);
     mRef++;
-    pthread_mutex_unlock(&mLow->ref_mutex);
+    mtx_unlock(&mLow->ref_mutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -167,10 +167,10 @@ void LowTLSContext::AddRef()
 
 void LowTLSContext::DecRef()
 {
-    pthread_mutex_lock(&mLow->ref_mutex);
+    mtx_lock(&mLow->ref_mutex);
     if (!--mRef)
     {
-        pthread_mutex_unlock(&mLow->ref_mutex);
+        mtx_unlock(&mLow->ref_mutex);
         delete this;
         return;
     }
@@ -178,5 +178,5 @@ void LowTLSContext::DecRef()
     {
         printf("assertion error 2 at lowtlscontext\n");
     }
-    pthread_mutex_unlock(&mLow->ref_mutex);
+    mtx_unlock(&mLow->ref_mutex);
 }

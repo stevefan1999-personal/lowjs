@@ -149,13 +149,13 @@ duk_ret_t low_fs_open_sync(duk_context *ctx)
             break;
         }
 
-        pthread_mutex_lock(&low->loop_thread_mutex);
+        mtx_lock(&low->loop_thread_mutex);
         if (!file->LowLoopCallback::mNext && low->loop_callback_last != file)
         {
             duk_debugger_cooperate(low->duk_ctx);
-            pthread_cond_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
+            cnd_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
         }
-        pthread_mutex_unlock(&low->loop_thread_mutex);
+        mtx_unlock(&low->loop_thread_mutex);
     }
 
     duk_push_int(ctx, file->FD());
@@ -222,13 +222,13 @@ duk_ret_t low_fs_close_sync(duk_context *ctx)
             return 0;
         }
 
-        pthread_mutex_lock(&low->loop_thread_mutex);
+        mtx_lock(&low->loop_thread_mutex);
         if (!file->LowLoopCallback::mNext && low->loop_callback_last != file)
         {
             duk_debugger_cooperate(low->duk_ctx);
-            pthread_cond_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
+            cnd_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
         }
-        pthread_mutex_unlock(&low->loop_thread_mutex);
+        mtx_unlock(&low->loop_thread_mutex);
     }
 
     return 0;
@@ -348,13 +348,13 @@ duk_ret_t low_fs_waitdone(duk_context *ctx)
             return 0;
         }
 
-        pthread_mutex_lock(&low->loop_thread_mutex);
+        mtx_lock(&low->loop_thread_mutex);
         if (!file->LowLoopCallback::mNext && low->loop_callback_last != file)
         {
             duk_debugger_cooperate(low->duk_ctx);
-            pthread_cond_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
+            cnd_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
         }
-        pthread_mutex_unlock(&low->loop_thread_mutex);
+        mtx_unlock(&low->loop_thread_mutex);
     }
 
     return 0;

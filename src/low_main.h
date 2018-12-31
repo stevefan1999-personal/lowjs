@@ -15,7 +15,7 @@
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
 
 #include <map>
-#include <pthread.h>
+#include <threads.h>
 #include <vector>
 
 using namespace std;
@@ -45,42 +45,42 @@ struct low_main_t
   multimap<int, int, less<int>, low_allocator<pair<const int, int>>> chore_times;
   int last_chore_time;
 
-  pthread_mutex_t loop_thread_mutex;
-  pthread_cond_t loop_thread_cond;
+  mtx_t loop_thread_mutex;
+  cnd_t loop_thread_cond;
   LowLoopCallback *loop_callback_first, *loop_callback_last;
 
 #if LOW_ESP32_LWIP_SPECIALITIES
   TaskHandle_t data_thread[LOW_NUM_DATA_THREADS];
   TaskHandle_t web_thread;
 #else
-  pthread_t data_thread[LOW_NUM_DATA_THREADS];
-  pthread_t web_thread;
+  thrd_t data_thread[LOW_NUM_DATA_THREADS];
+  thrd_t web_thread;
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
 
   bool data_thread_done;
-  pthread_mutex_t data_thread_mutex;
-  pthread_cond_t data_thread_cond, data_thread_done_cond;
+  mtx_t data_thread_mutex;
+  cnd_t data_thread_cond, data_thread_done_cond;
   LowDataCallback *data_callback_first[2], *data_callback_last[2];
 
-  pthread_mutex_t web_thread_mutex;
-  pthread_cond_t web_thread_done_cond;
+  mtx_t web_thread_mutex;
+  cnd_t web_thread_done_cond;
 #if !LOW_ESP32_LWIP_SPECIALITIES
   int web_thread_pipe[2];
 #endif /* LOW_ESP32_LWIP_SPECIALITIES */
   LowFD *web_changed_first, *web_changed_last;
   bool web_thread_done, web_thread_notinevents;
 
-  map<int, LowFD *, less < int>, low_allocator <pair<const int, LowFD *>>> fds;
+  map<int, LowFD *, less<int>, low_allocator<pair<const int, LowFD *>>> fds;
 
 #if LOW_INCLUDE_CARES_RESOLVER
   vector<LowDNSResolver *, low_allocator<LowDNSResolver *>> resolvers;
   int resolvers_active;
-  pthread_mutex_t resolvers_mutex;
+  mtx_t resolvers_mutex;
 #endif /* LOW_INCLUDE_CARES_RESOLVER */
-  vector<LowTLSContext *, low_allocator < LowTLSContext * >> tlsContexts;
-  vector<LowCryptoHash *, low_allocator < LowCryptoHash * >> cryptoHashes;
+  vector<LowTLSContext *, low_allocator<LowTLSContext * >> tlsContexts;
+  vector<LowCryptoHash *, low_allocator<LowCryptoHash * >> cryptoHashes;
 
-  pthread_mutex_t ref_mutex;
+  mtx_t ref_mutex;
 
 #if LOW_ESP32_LWIP_SPECIALITIES
   char *cwd;

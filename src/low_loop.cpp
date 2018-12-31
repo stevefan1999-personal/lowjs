@@ -79,7 +79,7 @@ bool low_loop_run(low_main_t *low)
             }
         }
 
-        pthread_mutex_lock(&low->loop_thread_mutex);
+        mtx_lock(&low->loop_thread_mutex);
         if (!low->loop_callback_first)
         {
             duk_debugger_cooperate(low->duk_ctx);
@@ -92,10 +92,10 @@ bool low_loop_run(low_main_t *low)
                 /*
                 // TODO under os x
                 pthread_condattr_t attr;
-                pthread_cond_t cond;
+                cnd_t cond;
                 pthread_condattr_init(&attr);
                 pthread_condattr_setclock(&attr, CLOCK_MONOTONIC);
-                pthread_cond_init(&cond, &attr);
+                cnd_init(&cond, &attr);
                 */
                 struct timespec ts;
                 int secs = millisecs / 1000;
@@ -116,11 +116,11 @@ bool low_loop_run(low_main_t *low)
                     ts.tv_nsec -= 1000000000;
                 }
 
-                pthread_cond_timedwait(&low->loop_thread_cond, &low->loop_thread_mutex, &ts);
+                cnd_timedwait(&low->loop_thread_cond, &low->loop_thread_mutex, &ts);
             }
             else
             {
-                pthread_cond_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
+                cnd_wait(&low->loop_thread_cond, &low->loop_thread_mutex);
             }
 #if LOW_ESP32_LWIP_SPECIALITIES
             user_cpu_load(true);
@@ -139,7 +139,7 @@ bool low_loop_run(low_main_t *low)
                 }
                 callback->mNext = NULL;
 
-                pthread_mutex_unlock(&low->loop_thread_mutex);
+                mtx_unlock(&low->loop_thread_mutex);
                 if (duk_safe_call(low->duk_ctx, low_loop_call_callback_safe, callback, 0, 1) != DUK_EXEC_SUCCESS)
                 {
                     if (!low->duk_flag_stop)
@@ -155,12 +155,12 @@ bool low_loop_run(low_main_t *low)
                 {
                     break;
                 }
-                pthread_mutex_lock(&low->loop_thread_mutex);
+                mtx_lock(&low->loop_thread_mutex);
             }
         }
         else
         {
-            pthread_mutex_unlock(&low->loop_thread_mutex);
+            mtx_unlock(&low->loop_thread_mutex);
         }
     }
     return true;
@@ -301,10 +301,10 @@ duk_ret_t low_loop_run_ref(duk_context *ctx)
 
 void low_loop_set_callback(low_main_t *low, LowLoopCallback *callback)
 {
-    pthread_mutex_lock(&low->loop_thread_mutex);
+    mtx_lock(&low->loop_thread_mutex);
     if (callback->mNext || low->loop_callback_last == callback)
     {
-        pthread_mutex_unlock(&low->loop_thread_mutex);
+        mtx_unlock(&low->loop_thread_mutex);
         return;
     }
 
@@ -318,8 +318,8 @@ void low_loop_set_callback(low_main_t *low, LowLoopCallback *callback)
     }
     low->loop_callback_last = callback;
 
-    pthread_cond_signal(&low->loop_thread_cond);
-    pthread_mutex_unlock(&low->loop_thread_mutex);
+    cnd_signal(&low->loop_thread_cond);
+    mtx_unlock(&low->loop_thread_mutex);
 }
 
 // -----------------------------------------------------------------------------
@@ -328,7 +328,7 @@ void low_loop_set_callback(low_main_t *low, LowLoopCallback *callback)
 
 void low_loop_clear_callback(low_main_t *low, LowLoopCallback *callback)
 {
-    pthread_mutex_lock(&low->loop_thread_mutex);
+    mtx_lock(&low->loop_thread_mutex);
     if (callback->mNext || low->loop_callback_last == callback)
     {
         LowLoopCallback *elem = low->loop_callback_first;
@@ -359,5 +359,5 @@ void low_loop_clear_callback(low_main_t *low, LowLoopCallback *callback)
         }
         callback->mNext = NULL;
     }
-    pthread_mutex_unlock(&low->loop_thread_mutex);
+    mtx_unlock(&low->loop_thread_mutex);
 }
